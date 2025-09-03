@@ -1,16 +1,10 @@
-# bot.py
 # Discord Moderations-Bot mit Slash-Commands (timeout/endtimeout/ban/endban/kick)
-# + Blacklist (nur Server-Eigentümer darf verwalten)
+# + Pro-Server-Blacklist (nur Server-Eigentümer darf verwalten)
 #
 # Voraussetzungen:
 #   - Python 3.10+
 #   - pip install -r requirements.txt
 #   - Umgebungsvariable DISCORD_TOKEN setzen (Railway: Variables)
-#
-# Hinweise:
-#   - Blacklist wird in blacklist.json gespeichert. Für persistente Speicherung auf Railway
-#     kannst du stattdessen eine Railway-Variable BLACKLIST_IDS verwenden (Komma-getrennt).
-#   - Die Slash-Commands sind per Permission abgesichert und erscheinen nur für berechtigte Nutzer.
 
 import os
 import json
@@ -31,54 +25,44 @@ BLACKLIST_FILE = "blacklist.json"
 
 # --------------------------- Blacklist-Storage ---------------------------
 
-def load_blacklist() -> set[int]:
-    # 1) Aus Datei lesen, falls vorhanden
+def load_blacklists() -> dict[int, set[int]]:
     if os.path.exists(BLACKLIST_FILE):
         try:
             with open(BLACKLIST_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return {int(x) for x in data.get("blacklist", [])}
+                return {
+                    int(gid): {int(uid) for uid in uids}
+                    for gid, uids in data.get("guilds", {}).items()
+                }
         except Exception:
             pass
-    # 2) Fallback: Railway Variable (Komma-getrennte IDs)
-    env_val = os.getenv("BLACKLIST_IDS", "").strip()
-    if env_val:
-        try:
-            return {int(x) for x in env_val.split(",") if x.strip().isdigit()}
-        except Exception:
-            return set()
-    return set()
+    return {}
 
 
-def save_blacklist(bl_ids: set[int]):
+def save_blacklists(blists: dict[int, set[int]]):
     try:
         with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
-            json.dump({"blacklist": list(bl_ids)}, f, indent=2, ensure_ascii=False)
+            data = {gid: list(uids) for gid, uids in blists.items()}
+            json.dump({"guilds": data}, f, indent=2, ensure_ascii=False)
     except Exception:
-        # Wenn Filesystem read-only o.ä., ignorieren (Railway-Variable weiterhin nutzbar)
         pass
 
 
-BLACKLIST_IDS = load_blacklist()
+BLACKLISTS: dict[int, set[int]] = load_blacklists()
 
 # --------------------------- Utils ---------------------------
 
 DURATION_PATTERN = re.compile(r"^\s*(\d+)\s*([a-zA-ZäöüÄÖÜ]+)?\s*$", re.IGNORECASE)
 
 UNIT_MAP = {
-    # Sekunden
     "s": "seconds", "sek": "seconds", "sekunde": "seconds", "sekunden": "seconds",
-    # Minuten
     "m": "minutes", "min": "minutes", "minute": "minutes", "minuten": "minutes",
-    # Stunden
     "h": "hours", "std": "hours", "stunde": "hours", "stunden": "hours",
-    # Tage
     "d": "days", "tag": "days", "tage": "days",
 }
 
 
 def parse_duration_to_timedelta(text: str) -> timedelta:
-    """Parst z.B. "1sek", "15 m", "2h", "3 tage" in timedelta."""
     if not text:
         raise ValueError("Bitte gib eine Dauer an, z.B. '30min' oder '1h'.")
     m = DURATION_PATTERN.match(text)
@@ -112,18 +96,17 @@ async def on_ready():
 
 @bot.event
 async def on_member_join(member: discord.Member):
-    # Auto-Kick, wenn auf Blacklist
-    if member.id in BLACKLIST_IDS:
+    guild_id = member.guild.id
+    if guild_id in BLACKLISTS and member.id in BLACKLISTS[guild_id]:
         try:
             await member.kick(reason="Automatischer Kick: Nutzer ist auf der Blacklist")
-            print(f"Gekickt (Blacklist): {member} [{member.id}]")
+            print(f"Gekickt (Blacklist): {member} [{member.id}] in Guild {guild_id}")
         except Exception as e:
             print(f"Kick fehlgeschlagen für {member.id}: {e}")
 
 
 # --------------------------- Slash-Commands ---------------------------
 
-# /timeout – benötigt Recht: moderate_members (Timeout Mitglieder)
 @bot.tree.command(name="timeout", description="Setzt einen Timeout für einen Nutzer (z.B. 30min, 2h, 3tage)")
 @app_commands.describe(user="Zu timeoutender Nutzer", dauer="Dauer, z.B. 30min / 2h / 1tag")
 @app_commands.checks.has_permissions(moderate_members=True)
@@ -140,7 +123,6 @@ async def timeout_cmd(inter: discord.Interaction, user: discord.Member, dauer: s
         await inter.response.send_message(f"❌ Fehler: {e}", ephemeral=True)
 
 
-# /endtimeout – benötigt Recht: moderate_members
 @bot.tree.command(name="endtimeout", description="Beendet den Timeout eines Nutzers")
 @app_commands.describe(user="Nutzer, dessen Timeout beendet werden soll")
 @app_commands.checks.has_permissions(moderate_members=True)
@@ -154,7 +136,6 @@ async def endtimeout_cmd(inter: discord.Interaction, user: discord.Member):
         await inter.response.send_message(f"❌ Fehler: {e}", ephemeral=True)
 
 
-# /ban – benötigt Recht: ban_members
 @bot.tree.command(name="ban", description="Bannt einen Nutzer")
 @app_commands.describe(user="Zu bannender Nutzer", grund="(optional) Grund")
 @app_commands.checks.has_permissions(ban_members=True)
@@ -168,7 +149,6 @@ async def ban_cmd(inter: discord.Interaction, user: discord.Member, grund: str |
         await inter.response.send_message(f"❌ Fehler: {e}", ephemeral=True)
 
 
-# /endban – benötigt Recht: ban_members
 @bot.tree.command(name="endban", description="Entbannt einen Nutzer per Nutzer-ID")
 @app_commands.describe(user_id="Discord Nutzer-ID des gebannten Nutzers")
 @app_commands.checks.has_permissions(ban_members=True)
@@ -178,7 +158,6 @@ async def endban_cmd(inter: discord.Interaction, user_id: str):
             await inter.response.send_message("❌ Bitte eine gültige numerische Nutzer-ID angeben.", ephemeral=True)
             return
         uid = int(user_id)
-        # In Banliste suchen und entbannen
         bans = await inter.guild.bans(limit=None)
         target = next((entry.user for entry in bans if entry.user.id == uid), None)
         if not target:
@@ -192,7 +171,6 @@ async def endban_cmd(inter: discord.Interaction, user_id: str):
         await inter.response.send_message(f"❌ Fehler: {e}", ephemeral=True)
 
 
-# /kick – benötigt Recht: kick_members
 @bot.tree.command(name="kick", description="Kickt einen Nutzer")
 @app_commands.describe(user="Zu kickender Nutzer", grund="(optional) Grund")
 @app_commands.checks.has_permissions(kick_members=True)
@@ -206,8 +184,7 @@ async def kick_cmd(inter: discord.Interaction, user: discord.Member, grund: str 
         await inter.response.send_message(f"❌ Fehler: {e}", ephemeral=True)
 
 
-# /addblacklist – nur Server-Eigentümer
-@bot.tree.command(name="addblacklist", description="Fügt eine Nutzer-ID zur Blacklist hinzu (nur Eigentümer)")
+@bot.tree.command(name="addblacklist", description="Fügt eine Nutzer-ID zur Blacklist dieses Servers hinzu (nur Eigentümer)")
 @app_commands.describe(user_id="Discord Nutzer-ID")
 async def addblacklist_cmd(inter: discord.Interaction, user_id: str):
     try:
@@ -216,20 +193,22 @@ async def addblacklist_cmd(inter: discord.Interaction, user_id: str):
             await inter.response.send_message("❌ Bitte eine gültige numerische Nutzer-ID angeben.", ephemeral=True)
             return
         uid = int(user_id)
-        if uid in BLACKLIST_IDS:
-            await inter.response.send_message(f"ℹ️ ID {uid} ist bereits auf der Blacklist.", ephemeral=True)
+        gid = inter.guild.id
+        if gid not in BLACKLISTS:
+            BLACKLISTS[gid] = set()
+        if uid in BLACKLISTS[gid]:
+            await inter.response.send_message(f"ℹ️ ID {uid} ist bereits auf der Blacklist dieses Servers.", ephemeral=True)
             return
-        BLACKLIST_IDS.add(uid)
-        save_blacklist(BLACKLIST_IDS)
-        await inter.response.send_message(f"✅ ID **{uid}** zur Blacklist hinzugefügt. Nutzer wird beim Join automatisch gekickt.", ephemeral=True)
+        BLACKLISTS[gid].add(uid)
+        save_blacklists(BLACKLISTS)
+        await inter.response.send_message(f"✅ ID **{uid}** zur Blacklist dieses Servers hinzugefügt.", ephemeral=True)
     except app_commands.AppCommandError as ace:
         await inter.response.send_message(f"❌ {ace}", ephemeral=True)
     except Exception as e:
         await inter.response.send_message(f"❌ Fehler: {e}", ephemeral=True)
 
 
-# /removeblacklist – nur Server-Eigentümer
-@bot.tree.command(name="removeblacklist", description="Entfernt eine Nutzer-ID von der Blacklist (nur Eigentümer)")
+@bot.tree.command(name="removeblacklist", description="Entfernt eine Nutzer-ID von der Blacklist dieses Servers (nur Eigentümer)")
 @app_commands.describe(user_id="Discord Nutzer-ID")
 async def removeblacklist_cmd(inter: discord.Interaction, user_id: str):
     try:
@@ -238,12 +217,13 @@ async def removeblacklist_cmd(inter: discord.Interaction, user_id: str):
             await inter.response.send_message("❌ Bitte eine gültige numerische Nutzer-ID angeben.", ephemeral=True)
             return
         uid = int(user_id)
-        if uid not in BLACKLIST_IDS:
-            await inter.response.send_message(f"ℹ️ ID {uid} ist nicht auf der Blacklist.", ephemeral=True)
+        gid = inter.guild.id
+        if gid not in BLACKLISTS or uid not in BLACKLISTS[gid]:
+            await inter.response.send_message(f"ℹ️ ID {uid} ist nicht auf der Blacklist dieses Servers.", ephemeral=True)
             return
-        BLACKLIST_IDS.remove(uid)
-        save_blacklist(BLACKLIST_IDS)
-        await inter.response.send_message(f"✅ ID **{uid}** von der Blacklist entfernt.", ephemeral=True)
+        BLACKLISTS[gid].remove(uid)
+        save_blacklists(BLACKLISTS)
+        await inter.response.send_message(f"✅ ID **{uid}** von der Blacklist dieses Servers entfernt.", ephemeral=True)
     except app_commands.AppCommandError as ace:
         await inter.response.send_message(f"❌ {ace}", ephemeral=True)
     except Exception as e:
@@ -270,13 +250,6 @@ async def perms_error_handler(inter: discord.Interaction, error: app_commands.Ap
 
 
 # --------------------------- Start ---------------------------
-
-def main():
-    token = os.getenv("DISCORD_TOKEN")
-    if not token:
-        raise RuntimeError("Umgebungsvariable DISCORD_TOKEN ist nicht gesetzt.")
-    bot.run(token)
-
 
 if __name__ == "__main__":
     TOKEN = os.getenv("DISCORD_TOKEN")
