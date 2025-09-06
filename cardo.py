@@ -17,7 +17,7 @@ from discord.ext import commands
 
 # --------------------------- Konfiguration ---------------------------
 INTENTS = discord.Intents.default()
-INTENTS.members = True  # benötigt für on_member_join & Member-Infos
+INTENTS.members = True
 INTENTS.message_content = True 
 
 bot = commands.Bot(command_prefix="$", intents=INTENTS)
@@ -32,14 +32,10 @@ def load_blacklists() -> dict[int, set[int]]:
         try:
             with open(BLACKLIST_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return {
-                    int(gid): {int(uid) for uid in uids}
-                    for gid, uids in data.get("guilds", {}).items()
-                }
+                return {int(gid): {int(uid) for uid in uids} for gid, uids in data.get("guilds", {}).items()}
         except Exception:
             pass
     return {}
-
 
 def save_blacklists(blists: dict[int, set[int]]):
     try:
@@ -48,7 +44,6 @@ def save_blacklists(blists: dict[int, set[int]]):
             json.dump({"guilds": data}, f, indent=2, ensure_ascii=False)
     except Exception:
         pass
-
 
 BLACKLISTS: dict[int, set[int]] = load_blacklists()
 
@@ -59,14 +54,10 @@ def load_trusts() -> dict[int, set[int]]:
         try:
             with open(TRUST_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return {
-                    int(gid): {int(uid) for uid in uids}
-                    for gid, uids in data.get("guilds", {}).items()
-                }
+                return {int(gid): {int(uid) for uid in uids} for gid, uids in data.get("guilds", {}).items()}
         except Exception:
             pass
     return {}
-
 
 def save_trusts(trusts: dict[int, set[int]]):
     try:
@@ -75,7 +66,6 @@ def save_trusts(trusts: dict[int, set[int]]):
             json.dump({"guilds": data}, f, indent=2, ensure_ascii=False)
     except Exception:
         pass
-
 
 TRUSTS: dict[int, set[int]] = load_trusts()
 
@@ -90,7 +80,6 @@ UNIT_MAP = {
     "d": "days", "tag": "days", "tage": "days",
 }
 
-
 def parse_duration_to_timedelta(text: str) -> timedelta:
     if not text:
         raise ValueError("Bitte gib eine Dauer an, z.B. '30min' oder '1h'.")
@@ -103,7 +92,6 @@ def parse_duration_to_timedelta(text: str) -> timedelta:
     if not unit:
         raise ValueError("Unbekannte Einheit. Erlaubt: s/sek, min, h/std, d/tage.")
     return timedelta(**{unit: amount})
-
 
 async def ensure_owner_or_trusted(ctx: commands.Context):
     """Prüfen ob User Guild Owner oder Trusted ist"""
@@ -121,23 +109,22 @@ async def ensure_owner_or_trusted(ctx: commands.Context):
 async def on_ready():
     print(f"Eingeloggt als {bot.user} (ID: {bot.user.id}) – Prefix-Commands aktiv.")
 
-    # ---------------- Update-Broadcast ----------------
     update_message = (
         "📢 **Update auf Version 1.1**\n\n"
         "🔹 **Neu hinzugefügt / geändert:**\n"
         "• Alle Moderations-Commands nutzen jetzt `$` statt `/`\n"
-        " (z. B. `$timeout @User 10min`).\n"
-        "• Neu: `$blacklisttrust <UserID>` – Der Server-Eigentümer kann damit **Trusted-User** festlegen, "
-        "die auch `$addblacklist` und `$removeblacklist` ausführen dürfen.\n\n"
+        "• Neu: `$blacklisttrust <UserID>` – Trusted-User setzen\n"
+        "• Neu: `$removeblacklisttrust <UserID>` – Trusted-User entfernen\n\n"
         "🔹 **Alle verfügbaren Commands:**\n"
-        "• `$timeout @User <Dauer>` – Nutzer in Timeout setzen\n"
-        "• `$endtimeout @User` – Timeout beenden\n"
-        "• `$ban @User [Grund]` – Nutzer bannen\n"
-        "• `$endban <UserID>` – Nutzer entbannen\n"
-        "• `$kick @User [Grund]` – Nutzer kicken\n"
-        "• `$addblacklist <UserID>` – ID zur Blacklist hinzufügen (Owner/Trusted)\n"
-        "• `$removeblacklist <UserID>` – ID von der Blacklist entfernen (Owner/Trusted)\n"
-        "• `$blacklisttrust <UserID>` – Nutzer als Trusted für Blacklist setzen (nur Owner)\n"
+        "• `$timeout @User <Dauer>`\n"
+        "• `$endtimeout @User`\n"
+        "• `$ban @User [Grund]`\n"
+        "• `$endban <UserID>`\n"
+        "• `$kick @User [Grund]`\n"
+        "• `$addblacklist <UserID>`\n"
+        "• `$removeblacklist <UserID>`\n"
+        "• `$blacklisttrust <UserID>`\n"
+        "• `$removeblacklisttrust <UserID>`\n"
     )
 
     for guild in bot.guilds:
@@ -164,7 +151,7 @@ async def on_member_join(member: discord.Member):
         except Exception as e:
             print(f"Kick fehlgeschlagen für {member.id}: {e}")
 
-# --------------------------- Prefix-Commands ---------------------------
+# --------------------------- Moderation Commands ---------------------------
 
 @bot.command(name="timeout")
 @commands.has_permissions(moderate_members=True)
@@ -176,7 +163,6 @@ async def timeout_cmd(ctx: commands.Context, member: discord.Member, dauer: str)
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
-
 @bot.command(name="endtimeout")
 @commands.has_permissions(moderate_members=True)
 async def endtimeout_cmd(ctx: commands.Context, member: discord.Member):
@@ -186,7 +172,6 @@ async def endtimeout_cmd(ctx: commands.Context, member: discord.Member):
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
-
 @bot.command(name="ban")
 @commands.has_permissions(ban_members=True)
 async def ban_cmd(ctx: commands.Context, member: discord.Member, *, grund: str = None):
@@ -195,7 +180,6 @@ async def ban_cmd(ctx: commands.Context, member: discord.Member, *, grund: str =
         await ctx.send(f"🔨 {member.mention} wurde gebannt.")
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
-
 
 @bot.command(name="endban")
 @commands.has_permissions(ban_members=True)
@@ -211,7 +195,6 @@ async def endban_cmd(ctx: commands.Context, user_id: int):
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
-
 @bot.command(name="kick")
 @commands.has_permissions(kick_members=True)
 async def kick_cmd(ctx: commands.Context, member: discord.Member, *, grund: str = None):
@@ -221,7 +204,7 @@ async def kick_cmd(ctx: commands.Context, member: discord.Member, *, grund: str 
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
-# --------- Blacklist + Trust Commands ---------
+# --------------------------- Blacklist + Trust Commands ---------------------------
 
 @bot.command(name="addblacklist")
 async def addblacklist_cmd(ctx: commands.Context, user_id: int):
@@ -239,7 +222,6 @@ async def addblacklist_cmd(ctx: commands.Context, user_id: int):
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
-
 @bot.command(name="removeblacklist")
 async def removeblacklist_cmd(ctx: commands.Context, user_id: int):
     try:
@@ -254,10 +236,8 @@ async def removeblacklist_cmd(ctx: commands.Context, user_id: int):
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
-
 @bot.command(name="blacklisttrust")
 async def blacklisttrust_cmd(ctx: commands.Context, user_id: int):
-    """Nur Owner darf Trusted-User setzen"""
     if ctx.author.id != ctx.guild.owner_id:
         await ctx.send("❌ Nur der Server-Eigentümer darf Trusted-User hinzufügen.")
         return
@@ -267,6 +247,19 @@ async def blacklisttrust_cmd(ctx: commands.Context, user_id: int):
     TRUSTS[gid].add(user_id)
     save_trusts(TRUSTS)
     await ctx.send(f"✅ ID **{user_id}** wurde als Trusted für Blacklist hinzugefügt.")
+
+@bot.command(name="removeblacklisttrust")
+async def removeblacklisttrust_cmd(ctx: commands.Context, user_id: int):
+    if ctx.author.id != ctx.guild.owner_id:
+        await ctx.send("❌ Nur der Server-Eigentümer darf Trusted-User entfernen.")
+        return
+    gid = ctx.guild.id
+    if gid in TRUSTS and user_id in TRUSTS[gid]:
+        TRUSTS[gid].remove(user_id)
+        save_trusts(TRUSTS)
+        await ctx.send(f"✅ ID **{user_id}** wurde aus den Trusted-Usern entfernt.")
+    else:
+        await ctx.send(f"ℹ️ ID {user_id} ist kein Trusted-User.")
 
 # --------------------------- Start ---------------------------
 
