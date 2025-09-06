@@ -17,6 +17,7 @@ from discord.ext import commands
 # --------------------------- Konfiguration ---------------------------
 INTENTS = discord.Intents.default()
 INTENTS.members = True  # benötigt für on_member_join & Member-Infos
+INTENTS.message_content = True 
 
 bot = commands.Bot(command_prefix="$", intents=INTENTS)
 
@@ -241,3 +242,4 @@ if __name__ == "__main__":
     if not TOKEN:
         raise RuntimeError("Umgebungsvariable DISCORD_TOKEN ist nicht gesetzt.")
     bot.run(TOKEN)
+
