@@ -1,5 +1,6 @@
 # Discord Moderations-Bot mit Prefix-Commands ($timeout/$endtimeout/$ban/$endban/$kick) 
 # + Pro-Server-Blacklist (nur Server-Eigentümer oder Trusted dürfen verwalten)
+# + Automatische Update-Ankündigung in Servern
 #
 # Voraussetzungen:
 #   - Python 3.10+
@@ -120,6 +121,38 @@ async def ensure_owner_or_trusted(ctx: commands.Context):
 async def on_ready():
     print(f"Eingeloggt als {bot.user} (ID: {bot.user.id}) – Prefix-Commands aktiv.")
 
+    # ---------------- Update-Broadcast ----------------
+    update_message = (
+        "📢 **Update auf Version 1.1**\n\n"
+        "🔹 **Neu hinzugefügt / geändert:**\n"
+        "• Alle Moderations-Commands nutzen jetzt `$` statt `/`\n"
+        " (z. B. `$timeout @User 10min`).\n"
+        "• Neu: `$blacklisttrust <UserID>` – Der Server-Eigentümer kann damit **Trusted-User** festlegen, "
+        "die auch `$addblacklist` und `$removeblacklist` ausführen dürfen.\n\n"
+        "🔹 **Alle verfügbaren Commands:**\n"
+        "• `$timeout @User <Dauer>` – Nutzer in Timeout setzen\n"
+        "• `$endtimeout @User` – Timeout beenden\n"
+        "• `$ban @User [Grund]` – Nutzer bannen\n"
+        "• `$endban <UserID>` – Nutzer entbannen\n"
+        "• `$kick @User [Grund]` – Nutzer kicken\n"
+        "• `$addblacklist <UserID>` – ID zur Blacklist hinzufügen (Owner/Trusted)\n"
+        "• `$removeblacklist <UserID>` – ID von der Blacklist entfernen (Owner/Trusted)\n"
+        "• `$blacklisttrust <UserID>` – Nutzer als Trusted für Blacklist setzen (nur Owner)\n"
+    )
+
+    for guild in bot.guilds:
+        channel = discord.utils.find(
+            lambda c: isinstance(c, discord.TextChannel)
+                      and c.permissions_for(guild.me).send_messages
+                      and ("announce" in c.name.lower() or "ankünd" in c.name.lower()),
+            guild.text_channels,
+        )
+        if channel:
+            try:
+                await channel.send(update_message)
+                print(f"Update in {guild.name} -> #{channel.name} gesendet.")
+            except Exception as e:
+                print(f"Update konnte nicht in {guild.name} gesendet werden: {e}")
 
 @bot.event
 async def on_member_join(member: discord.Member):
@@ -242,4 +275,3 @@ if __name__ == "__main__":
     if not TOKEN:
         raise RuntimeError("Umgebungsvariable DISCORD_TOKEN ist nicht gesetzt.")
     bot.run(TOKEN)
-
