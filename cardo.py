@@ -1,12 +1,3 @@
-# Discord Moderations-Bot mit Prefix-Commands ($timeout/$endtimeout/$ban/$endban/$kick) 
-# + Pro-Server-Blacklist (nur Server-Eigentümer oder Trusted dürfen verwalten)
-# + Automatische Update-Ankündigung in Servern
-#
-# Voraussetzungen:
-#   - Python 3.10+
-#   - pip install -r requirements.txt
-#   - Umgebungsvariable DISCORD_TOKEN setzen (Railway: Variables)
-
 import os
 import json
 import re
@@ -125,6 +116,8 @@ async def on_ready():
         "• `$removeblacklist <UserID>`\n"
         "• `$blacklisttrust <UserID>`\n"
         "• `$removeblacklisttrust <UserID>`\n"
+        "• `$addrole @User Rollenname`\n"
+        "• `$stealrole @User Rollenname`\n"
     )
 
     for guild in bot.guilds:
@@ -201,6 +194,37 @@ async def kick_cmd(ctx: commands.Context, member: discord.Member, *, grund: str 
     try:
         await member.kick(reason=grund or f"Kick von {ctx.author}")
         await ctx.send(f"👢 {member.mention} wurde gekickt.")
+    except Exception as e:
+        await ctx.send(f"❌ Fehler: {e}")
+
+# --------------------------- Rollen Commands ---------------------------
+
+@bot.command(name="addrole")
+@commands.has_permissions(manage_roles=True)
+async def addrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
+    try:
+        role = discord.utils.get(ctx.guild.roles, name=role_name)
+        if not role:
+            await ctx.send(f"❌ Rolle **{role_name}** nicht gefunden.")
+            return
+        await member.add_roles(role, reason=f"Rolle hinzugefügt von {ctx.author}")
+        await ctx.send(f"✅ {member.mention} hat die Rolle **{role_name}** erhalten.")
+    except Exception as e:
+        await ctx.send(f"❌ Fehler: {e}")
+
+@bot.command(name="stealrole")
+@commands.has_permissions(manage_roles=True)
+async def stealrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
+    try:
+        role = discord.utils.get(ctx.guild.roles, name=role_name)
+        if not role:
+            await ctx.send(f"❌ Rolle **{role_name}** nicht gefunden.")
+            return
+        if role not in member.roles:
+            await ctx.send(f"ℹ️ {member.mention} hat die Rolle **{role_name}** nicht.")
+            return
+        await member.remove_roles(role, reason=f"Rolle entfernt von {ctx.author}")
+        await ctx.send(f"✅ {member.mention} wurde die Rolle **{role_name}** entfernt.")
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
