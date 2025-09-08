@@ -165,19 +165,23 @@ async def kick_cmd(ctx: commands.Context, member: discord.Member, *, grund: str 
 
 # --------------------------- Rollen Commands ---------------------------
 
-def find_role_by_name_strict(guild: discord.Guild, role_name: str):
-    """
-    Suche nach Rolle, die den Namen enthält, Sonderzeichen ignoriert,
-    aber keine weiteren Buchstaben/Wörter direkt anhängen.
-    """
-    pattern = re.compile(rf"(^|[^a-zA-Z0-9]){re.escape(role_name)}([^a-zA-Z0-9]|$)", re.IGNORECASE)
-    return discord.utils.find(lambda r: pattern.search(r.name), guild.roles)
+def normalize_role_name(name: str) -> str:
+    """Entfernt Sonderzeichen und macht alles lowercase"""
+    return re.sub(r"[^a-zA-Z0-9]", "", name).lower()
+
+def find_role_exact(guild: discord.Guild, role_name: str):
+    """Sucht die Rolle exakt nach Buchstaben/Zahlen (Sonderzeichen ignoriert)"""
+    norm_input = normalize_role_name(role_name)
+    for role in guild.roles:
+        if normalize_role_name(role.name) == norm_input:
+            return role
+    return None
 
 @bot.command(name="addrole")
 @commands.has_permissions(manage_roles=True)
 async def addrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
     try:
-        role = find_role_by_name_strict(ctx.guild, role_name)
+        role = find_role_exact(ctx.guild, role_name)
         if not role:
             await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** entspricht.")
             return
@@ -190,7 +194,7 @@ async def addrole_cmd(ctx: commands.Context, member: discord.Member, *, role_nam
 @commands.has_permissions(manage_roles=True)
 async def stealrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
     try:
-        role = find_role_by_name_strict(ctx.guild, role_name)
+        role = find_role_exact(ctx.guild, role_name)
         if not role:
             await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** entspricht.")
             return
