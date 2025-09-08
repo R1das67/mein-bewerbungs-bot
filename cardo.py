@@ -165,21 +165,21 @@ async def kick_cmd(ctx: commands.Context, member: discord.Member, *, grund: str 
 
 # --------------------------- Rollen Commands ---------------------------
 
-def find_role_by_name(guild: discord.Guild, role_name: str):
-    # Zuerst exakter Treffer (case-insensitive)
-    exact = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), guild.roles)
-    if exact:
-        return exact
-    # Dann Teilstring-Suche
-    return discord.utils.find(lambda r: role_name.lower() in r.name.lower(), guild.roles)
+def find_role_by_name_strict(guild: discord.Guild, role_name: str):
+    """
+    Suche nach Rolle, die den Namen enthält, Sonderzeichen ignoriert,
+    aber keine weiteren Buchstaben/Wörter direkt anhängen.
+    """
+    pattern = re.compile(rf"(^|[^a-zA-Z0-9]){re.escape(role_name)}([^a-zA-Z0-9]|$)", re.IGNORECASE)
+    return discord.utils.find(lambda r: pattern.search(r.name), guild.roles)
 
 @bot.command(name="addrole")
 @commands.has_permissions(manage_roles=True)
 async def addrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
     try:
-        role = find_role_by_name(ctx.guild, role_name)
+        role = find_role_by_name_strict(ctx.guild, role_name)
         if not role:
-            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** heißt oder enthält.")
+            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** entspricht.")
             return
         await member.add_roles(role, reason=f"Rolle hinzugefügt von {ctx.author}")
         await ctx.send(f"✅ {member.mention} hat die Rolle **{role.name}** erhalten.")
@@ -190,9 +190,9 @@ async def addrole_cmd(ctx: commands.Context, member: discord.Member, *, role_nam
 @commands.has_permissions(manage_roles=True)
 async def stealrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
     try:
-        role = find_role_by_name(ctx.guild, role_name)
+        role = find_role_by_name_strict(ctx.guild, role_name)
         if not role:
-            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** heißt oder enthält.")
+            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** entspricht.")
             return
         if role not in member.roles:
             await ctx.send(f"ℹ️ {member.mention} hat die Rolle **{role.name}** nicht.")
