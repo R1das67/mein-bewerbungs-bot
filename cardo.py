@@ -165,14 +165,21 @@ async def kick_cmd(ctx: commands.Context, member: discord.Member, *, grund: str 
 
 # --------------------------- Rollen Commands ---------------------------
 
+def find_role_by_name(guild: discord.Guild, role_name: str):
+    # Zuerst exakter Treffer (case-insensitive)
+    exact = discord.utils.find(lambda r: r.name.lower() == role_name.lower(), guild.roles)
+    if exact:
+        return exact
+    # Dann Teilstring-Suche
+    return discord.utils.find(lambda r: role_name.lower() in r.name.lower(), guild.roles)
+
 @bot.command(name="addrole")
 @commands.has_permissions(manage_roles=True)
 async def addrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
     try:
-        # Suche nach Rolle, die den angegebenen Text enthält (case-insensitive)
-        role = discord.utils.find(lambda r: role_name.lower() in r.name.lower(), ctx.guild.roles)
+        role = find_role_by_name(ctx.guild, role_name)
         if not role:
-            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** enthält.")
+            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** heißt oder enthält.")
             return
         await member.add_roles(role, reason=f"Rolle hinzugefügt von {ctx.author}")
         await ctx.send(f"✅ {member.mention} hat die Rolle **{role.name}** erhalten.")
@@ -183,9 +190,9 @@ async def addrole_cmd(ctx: commands.Context, member: discord.Member, *, role_nam
 @commands.has_permissions(manage_roles=True)
 async def stealrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
     try:
-        role = discord.utils.find(lambda r: role_name.lower() in r.name.lower(), ctx.guild.roles)
+        role = find_role_by_name(ctx.guild, role_name)
         if not role:
-            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** enthält.")
+            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** heißt oder enthält.")
             return
         if role not in member.roles:
             await ctx.send(f"ℹ️ {member.mention} hat die Rolle **{role.name}** nicht.")
