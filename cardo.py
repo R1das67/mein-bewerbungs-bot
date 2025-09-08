@@ -169,12 +169,13 @@ async def kick_cmd(ctx: commands.Context, member: discord.Member, *, grund: str 
 @commands.has_permissions(manage_roles=True)
 async def addrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
     try:
-        role = discord.utils.get(ctx.guild.roles, name=role_name)
+        # Suche nach Rolle, die den angegebenen Text enthält (case-insensitive)
+        role = discord.utils.find(lambda r: role_name.lower() in r.name.lower(), ctx.guild.roles)
         if not role:
-            await ctx.send(f"❌ Rolle **{role_name}** nicht gefunden.")
+            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** enthält.")
             return
         await member.add_roles(role, reason=f"Rolle hinzugefügt von {ctx.author}")
-        await ctx.send(f"✅ {member.mention} hat die Rolle **{role_name}** erhalten.")
+        await ctx.send(f"✅ {member.mention} hat die Rolle **{role.name}** erhalten.")
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
@@ -182,15 +183,15 @@ async def addrole_cmd(ctx: commands.Context, member: discord.Member, *, role_nam
 @commands.has_permissions(manage_roles=True)
 async def stealrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
     try:
-        role = discord.utils.get(ctx.guild.roles, name=role_name)
+        role = discord.utils.find(lambda r: role_name.lower() in r.name.lower(), ctx.guild.roles)
         if not role:
-            await ctx.send(f"❌ Rolle **{role_name}** nicht gefunden.")
+            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** enthält.")
             return
         if role not in member.roles:
-            await ctx.send(f"ℹ️ {member.mention} hat die Rolle **{role_name}** nicht.")
+            await ctx.send(f"ℹ️ {member.mention} hat die Rolle **{role.name}** nicht.")
             return
         await member.remove_roles(role, reason=f"Rolle entfernt von {ctx.author}")
-        await ctx.send(f"✅ {member.mention} wurde die Rolle **{role_name}** entfernt.")
+        await ctx.send(f"✅ {member.mention} wurde die Rolle **{role.name}** entfernt.")
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
@@ -258,4 +259,3 @@ if __name__ == "__main__":
     if not TOKEN:
         raise RuntimeError("Umgebungsvariable DISCORD_TOKEN ist nicht gesetzt.")
     bot.run(TOKEN)
-
