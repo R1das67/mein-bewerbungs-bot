@@ -144,13 +144,13 @@ async def ban_cmd(ctx: commands.Context, member: discord.Member, *, grund: str =
 @commands.has_permissions(ban_members=True)
 async def endban_cmd(ctx: commands.Context, user_id: int):
     try:
-        bans = await ctx.guild.bans()
-        target = next((entry.user for entry in bans if entry.user.id == user_id), None)
-        if not target:
-            await ctx.send("ℹ️ Nutzer-ID nicht in der Banliste gefunden.")
-            return
-        await ctx.guild.unban(target, reason=f"Entbannt von {ctx.author}")
-        await ctx.send(f"✅ Nutzer **{target}** ({user_id}) wurde entbannt.")
+        user = await bot.fetch_user(user_id)  # User direkt von der Discord API holen
+        await ctx.guild.unban(user, reason=f"Entbannt von {ctx.author}")
+        await ctx.send(f"✅ Nutzer **{user}** ({user_id}) wurde entbannt.")
+    except discord.NotFound:
+        await ctx.send("❌ Kein User mit dieser ID gefunden oder nicht gebannt.")
+    except discord.Forbidden:
+        await ctx.send("❌ Ich habe keine Berechtigung zum Entbannen.")
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
