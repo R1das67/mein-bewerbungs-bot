@@ -207,9 +207,18 @@ def find_role_exact(guild: discord.Guild, role_name: str):
             return role
     return None
 
+def user_can_manage_roles(user: discord.Member) -> bool:
+    """Prüft, ob der User eine Rolle hat, die Rollen verwalten kann."""
+    for role in user.roles:
+        if role.permissions.manage_roles:
+            return True
+    return False
+
 @bot.command(name="addrole")
-@commands.has_permissions(manage_roles=True)
 async def addrole_cmd(ctx: commands.Context, member: discord.Member = None, *, role_name: str = None):
+    if not user_can_manage_roles(ctx.author):
+        await ctx.send("❌ Du hast keine Berechtigung, Rollen zu verwalten.")
+        return
     if not member:
         await ctx.send("❌ Bitte gib einen Nutzer an, dem die Rolle hinzugefügt werden soll.")
         return
@@ -239,8 +248,10 @@ async def addrole_cmd(ctx: commands.Context, member: discord.Member = None, *, r
         await ctx.send(f"❌ Unerwarteter Fehler: {e}")
 
 @bot.command(name="stealrole")
-@commands.has_permissions(manage_roles=True)
 async def stealrole_cmd(ctx: commands.Context, member: discord.Member = None, *, role_name: str = None):
+    if not user_can_manage_roles(ctx.author):
+        await ctx.send("❌ Du hast keine Berechtigung, Rollen zu verwalten.")
+        return
     if not member:
         await ctx.send("❌ Bitte gib einen Nutzer an, von dem die Rolle entfernt werden soll.")
         return
