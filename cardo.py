@@ -95,11 +95,9 @@ async def ensure_owner_or_trusted(ctx: commands.Context):
     raise commands.CheckFailure("Nur der Server-Eigentümer oder vertrauenswürdige Nutzer dürfen diese Aktion ausführen.")
 
 def user_can_manage_roles(user: discord.Member) -> bool:
-    """Prüft, ob der User eine Rolle hat, die Rollen verwalten kann."""
-    for role in user.roles:
-        if role.permissions.manage_roles:
-            return True
-    return False
+    """Prüft, ob der User Rollen verwalten darf (manage_roles oder admin)."""
+    perms = user.guild_permissions
+    return perms.manage_roles or perms.administrator
 
 def user_can_interact(author: discord.Member, target: discord.Member) -> bool:
     """Prüft die Hierarchie zwischen zwei Nutzern (z.B. Timeout, Ban, Kick)."""
