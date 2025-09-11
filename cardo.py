@@ -105,6 +105,12 @@ def user_can_interact(author: discord.Member, target: discord.Member) -> bool:
         return True
     return False
 
+def bot_can_interact(bot_member: discord.Member, target: discord.Member) -> bool:
+    """Prüft, ob der Bot den Target-User verwalten darf (Hierarchie)."""
+    if target.guild.owner_id == target.id:
+        return False
+    return bot_member.top_role > target.top_role
+
 # --------------------------- Events ---------------------------
 
 @bot.event
@@ -152,6 +158,9 @@ async def timeout_cmd(ctx: commands.Context, member: discord.Member = None, daue
     if not user_can_interact(ctx.author, member):
         await ctx.send("❌ Du kannst diesen Nutzer nicht timeouten, da er eine höhere Rolle hat als du.")
         return
+    if not bot_can_interact(ctx.guild.me, member):
+        await ctx.send("❌ Ich kann diesen Nutzer nicht timeouten, da seine Rolle über meiner steht.")
+        return
     try:
         delta = parse_duration_to_timedelta(dauer)
         await member.timeout(delta, reason=f"Timeout von {ctx.author}")
@@ -170,6 +179,9 @@ async def endtimeout_cmd(ctx: commands.Context, member: discord.Member = None):
     if not user_can_interact(ctx.author, member):
         await ctx.send("❌ Du kannst den Timeout dieses Nutzers nicht beenden, da er eine höhere Rolle hat als du.")
         return
+    if not bot_can_interact(ctx.guild.me, member):
+        await ctx.send("❌ Ich kann den Timeout dieses Nutzers nicht beenden, da seine Rolle über meiner steht.")
+        return
     try:
         await member.timeout(None, reason=f"Timeout beendet von {ctx.author}")
         await ctx.send(f"✅ Timeout von {member.mention} wurde beendet.")
@@ -184,6 +196,9 @@ async def ban_cmd(ctx: commands.Context, member: discord.Member, *, grund: str =
     if not user_can_interact(ctx.author, member):
         await ctx.send("❌ Du kannst diesen Nutzer nicht bannen, da er eine höhere Rolle hat als du.")
         return
+    if not bot_can_interact(ctx.guild.me, member):
+        await ctx.send("❌ Ich kann diesen Nutzer nicht bannen, da seine Rolle über meiner steht.")
+        return
     try:
         await member.ban(reason=grund or f"Ban von {ctx.author}")
         await ctx.send(f"🔨 {member.mention} wurde gebannt.")
@@ -196,9 +211,13 @@ async def endban_cmd(ctx: commands.Context, user_id: int):
     try:
         user = await bot.fetch_user(user_id)
         target_member = ctx.guild.get_member(user_id)
-        if target_member and not user_can_interact(ctx.author, target_member):
-            await ctx.send("❌ Du kannst diesen Nutzer nicht entbannen, da er eine höhere Rolle hat als du.")
-            return
+        if target_member:
+            if not user_can_interact(ctx.author, target_member):
+                await ctx.send("❌ Du kannst diesen Nutzer nicht entbannen, da er eine höhere Rolle hat als du.")
+                return
+            if not bot_can_interact(ctx.guild.me, target_member):
+                await ctx.send("❌ Ich kann diesen Nutzer nicht entbannen, da seine Rolle über meiner steht.")
+                return
         await ctx.guild.unban(user, reason=f"Entbannt von {ctx.author}")
         await ctx.send(f"✅ Nutzer **{user}** ({user_id}) wurde entbannt.")
     except discord.NotFound:
@@ -213,6 +232,9 @@ async def endban_cmd(ctx: commands.Context, user_id: int):
 async def kick_cmd(ctx: commands.Context, member: discord.Member, *, grund: str = None):
     if not user_can_interact(ctx.author, member):
         await ctx.send("❌ Du kannst diesen Nutzer nicht kicken, da er eine höhere Rolle hat als du.")
+        return
+    if not bot_can_interact(ctx.guild.me, member):
+        await ctx.send("❌ Ich kann diesen Nutzer nicht kicken, da seine Rolle über meiner steht.")
         return
     try:
         await member.kick(reason=grund or f"Kick von {ctx.author}")
@@ -250,8 +272,11 @@ async def addrole_cmd(ctx: commands.Context, member: discord.Member = None, *, r
     if role >= ctx.guild.me.top_role:
         await ctx.send("❌ Ich kann diese Rolle nicht vergeben, weil sie über meiner höchsten Rolle steht.")
         return
-    if member != ctx.author and role >= member.top_role:
-        await ctx.send("❌ Du kannst diese Rolle nicht vergeben, weil sie über der höchsten Rolle des Nutzers liegt.")
+    if role >= ctx.author.top_role:
+        await ctx.send("❌ Du kannst keine Rolle vergeben, die gleich hoch oder höher als deine höchste Rolle ist.")
+        return
+    if member.top_role >= ctx.author.top_role and member != ctx.author:
+        await ctx.send("❌ Du kannst diesem Nutzer keine Rolle geben, da er die gleiche oder eine höhere Rolle hat als du.")
         return
     try:
         await member.add_roles(role, reason=f"Rolle hinzugefügt von {ctx.author}")
@@ -282,8 +307,11 @@ async def stealrole_cmd(ctx: commands.Context, member: discord.Member = None, *,
     if role >= ctx.guild.me.top_role:
         await ctx.send("❌ Ich kann diese Rolle nicht entfernen, weil sie über meiner höchsten Rolle steht.")
         return
-    if member != ctx.author and role >= member.top_role:
-        await ctx.send("❌ Du kannst diese Rolle nicht entfernen, weil sie über der höchsten Rolle des Nutzers liegt.")
+    if role >= ctx.author.top_role:
+        await ctx.send("❌ Du kannst keine Rolle entfernen, die gleich hoch oder höher als deine höchste Rolle ist.")
+        return
+    if member.top_role >= ctx.author.top_role and member != ctx.author:
+        await ctx.send("❌ Du kannst von diesem Nutzer keine Rolle entfernen, da er die gleiche oder eine höhere Rolle hat als du.")
         return
     try:
         await member.remove_roles(role, reason=f"Rolle entfernt von {ctx.author}")
@@ -355,5 +383,5 @@ async def removeblacklisttrust_cmd(ctx: commands.Context, user_id: int):
 if __name__ == "__main__":
     TOKEN = os.getenv("DISCORD_TOKEN")
     if not TOKEN:
-        raise RuntimeError("Umgebungsvariable DISCORD_TOKEN ist nicht gesetzt.")
+        raise RuntimeError("Umgebungsvariable DISCORD_TOKEN fehlt.")
     bot.run(TOKEN)
