@@ -94,6 +94,19 @@ async def ensure_owner_or_trusted(ctx: commands.Context):
         return
     raise commands.CheckFailure("Nur der Server-Eigentümer oder vertrauenswürdige Nutzer dürfen diese Aktion ausführen.")
 
+def user_can_manage_roles(user: discord.Member) -> bool:
+    """Prüft, ob der User eine Rolle hat, die Rollen verwalten kann."""
+    for role in user.roles:
+        if role.permissions.manage_roles:
+            return True
+    return False
+
+def user_can_interact(author: discord.Member, target: discord.Member) -> bool:
+    """Prüft die Hierarchie zwischen zwei Nutzern (z.B. Timeout, Ban, Kick)."""
+    if author == target.guild.owner or author.top_role > target.top_role:
+        return True
+    return False
+
 # --------------------------- Events ---------------------------
 
 @bot.event
@@ -138,6 +151,9 @@ async def timeout_cmd(ctx: commands.Context, member: discord.Member = None, daue
     if not dauer:
         await ctx.send("❌ Bitte gib eine Dauer an, z.B. '30min' oder '1h'.")
         return
+    if not user_can_interact(ctx.author, member):
+        await ctx.send("❌ Du kannst diesen Nutzer nicht timeouten, da er eine höhere Rolle hat als du.")
+        return
     try:
         delta = parse_duration_to_timedelta(dauer)
         await member.timeout(delta, reason=f"Timeout von {ctx.author}")
@@ -153,6 +169,9 @@ async def endtimeout_cmd(ctx: commands.Context, member: discord.Member = None):
     if not member:
         await ctx.send("❌ Bitte gib einen Nutzer an, dessen Timeout beendet werden soll.")
         return
+    if not user_can_interact(ctx.author, member):
+        await ctx.send("❌ Du kannst den Timeout dieses Nutzers nicht beenden, da er eine höhere Rolle hat als du.")
+        return
     try:
         await member.timeout(None, reason=f"Timeout beendet von {ctx.author}")
         await ctx.send(f"✅ Timeout von {member.mention} wurde beendet.")
@@ -164,6 +183,9 @@ async def endtimeout_cmd(ctx: commands.Context, member: discord.Member = None):
 @bot.command(name="ban")
 @commands.has_permissions(ban_members=True)
 async def ban_cmd(ctx: commands.Context, member: discord.Member, *, grund: str = None):
+    if not user_can_interact(ctx.author, member):
+        await ctx.send("❌ Du kannst diesen Nutzer nicht bannen, da er eine höhere Rolle hat als du.")
+        return
     try:
         await member.ban(reason=grund or f"Ban von {ctx.author}")
         await ctx.send(f"🔨 {member.mention} wurde gebannt.")
@@ -174,7 +196,11 @@ async def ban_cmd(ctx: commands.Context, member: discord.Member, *, grund: str =
 @commands.has_permissions(ban_members=True)
 async def endban_cmd(ctx: commands.Context, user_id: int):
     try:
-        user = await bot.fetch_user(user_id)  # User direkt von der Discord API holen
+        user = await bot.fetch_user(user_id)
+        target_member = ctx.guild.get_member(user_id)
+        if target_member and not user_can_interact(ctx.author, target_member):
+            await ctx.send("❌ Du kannst diesen Nutzer nicht entbannen, da er eine höhere Rolle hat als du.")
+            return
         await ctx.guild.unban(user, reason=f"Entbannt von {ctx.author}")
         await ctx.send(f"✅ Nutzer **{user}** ({user_id}) wurde entbannt.")
     except discord.NotFound:
@@ -187,6 +213,9 @@ async def endban_cmd(ctx: commands.Context, user_id: int):
 @bot.command(name="kick")
 @commands.has_permissions(kick_members=True)
 async def kick_cmd(ctx: commands.Context, member: discord.Member, *, grund: str = None):
+    if not user_can_interact(ctx.author, member):
+        await ctx.send("❌ Du kannst diesen Nutzer nicht kicken, da er eine höhere Rolle hat als du.")
+        return
     try:
         await member.kick(reason=grund or f"Kick von {ctx.author}")
         await ctx.send(f"👢 {member.mention} wurde gekickt.")
@@ -196,23 +225,14 @@ async def kick_cmd(ctx: commands.Context, member: discord.Member, *, grund: str 
 # --------------------------- Rollen Commands ---------------------------
 
 def normalize_role_name(name: str) -> str:
-    """Entfernt Sonderzeichen und macht alles lowercase"""
     return re.sub(r"[^a-zA-Z0-9]", "", name).lower()
 
 def find_role_exact(guild: discord.Guild, role_name: str):
-    """Sucht die Rolle exakt nach Buchstaben/Zahlen (Sonderzeichen ignoriert)"""
     norm_input = normalize_role_name(role_name)
     for role in guild.roles:
         if normalize_role_name(role.name) == norm_input:
             return role
     return None
-
-def user_can_manage_roles(user: discord.Member) -> bool:
-    """Prüft, ob der User eine Rolle hat, die Rollen verwalten kann."""
-    for role in user.roles:
-        if role.permissions.manage_roles:
-            return True
-    return False
 
 @bot.command(name="addrole")
 async def addrole_cmd(ctx: commands.Context, member: discord.Member = None, *, role_name: str = None):
@@ -225,20 +245,16 @@ async def addrole_cmd(ctx: commands.Context, member: discord.Member = None, *, r
     if not role_name:
         await ctx.send("❌ Bitte gib die Rolle an, die vergeben werden soll.")
         return
-
     role = find_role_exact(ctx.guild, role_name)
     if not role:
         await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** entspricht.")
         return
-
     if role >= ctx.guild.me.top_role:
         await ctx.send("❌ Ich kann diese Rolle nicht vergeben, weil sie über meiner höchsten Rolle steht.")
         return
-
-    if role >= member.top_role and member != ctx.author:
+    if member != ctx.author and role >= member.top_role:
         await ctx.send("❌ Du kannst diese Rolle nicht vergeben, weil sie über der höchsten Rolle des Nutzers liegt.")
         return
-
     try:
         await member.add_roles(role, reason=f"Rolle hinzugefügt von {ctx.author}")
         await ctx.send(f"✅ {member.mention} hat die Rolle **{role.name}** erhalten.")
@@ -258,7 +274,6 @@ async def stealrole_cmd(ctx: commands.Context, member: discord.Member = None, *,
     if not role_name:
         await ctx.send("❌ Bitte gib die Rolle an, die entfernt werden soll.")
         return
-
     role = find_role_exact(ctx.guild, role_name)
     if not role:
         await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** entspricht.")
@@ -266,15 +281,12 @@ async def stealrole_cmd(ctx: commands.Context, member: discord.Member = None, *,
     if role not in member.roles:
         await ctx.send(f"ℹ️ {member.mention} hat die Rolle **{role.name}** nicht.")
         return
-
     if role >= ctx.guild.me.top_role:
         await ctx.send("❌ Ich kann diese Rolle nicht entfernen, weil sie über meiner höchsten Rolle steht.")
         return
-
-    if role >= member.top_role and member != ctx.author:
+    if member != ctx.author and role >= member.top_role:
         await ctx.send("❌ Du kannst diese Rolle nicht entfernen, weil sie über der höchsten Rolle des Nutzers liegt.")
         return
-
     try:
         await member.remove_roles(role, reason=f"Rolle entfernt von {ctx.author}")
         await ctx.send(f"✅ {member.mention} wurde die Rolle **{role.name}** entfernt.")
