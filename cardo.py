@@ -110,24 +110,54 @@ async def on_member_join(member: discord.Member):
         except Exception as e:
             print(f"Kick fehlgeschlagen für {member.id}: {e}")
 
+# --------------------------- Command Error Handling ---------------------------
+
+@bot.event
+async def on_command_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("❌ Bitte gib alle benötigten Argumente an.")
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("❌ Nutzer nicht gefunden.")
+    elif isinstance(error, commands.RoleNotFound):
+        await ctx.send("❌ Rolle nicht gefunden.")
+    elif isinstance(error, commands.CheckFailure):
+        await ctx.send("❌ Du hast nicht die Berechtigung, diesen Command zu benutzen.")
+    elif isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ Dir fehlt die benötigte Discord-Permission.")
+    else:
+        await ctx.send(f"❌ Unerwarteter Fehler: {error}")
+
 # --------------------------- Moderation Commands ---------------------------
 
 @bot.command(name="timeout")
 @commands.has_permissions(moderate_members=True)
-async def timeout_cmd(ctx: commands.Context, member: discord.Member, dauer: str):
+async def timeout_cmd(ctx: commands.Context, member: discord.Member = None, dauer: str = None):
+    if not member:
+        await ctx.send("❌ Bitte gib einen Nutzer an, der getimeoutet werden soll.")
+        return
+    if not dauer:
+        await ctx.send("❌ Bitte gib eine Dauer an, z.B. '30min' oder '1h'.")
+        return
     try:
         delta = parse_duration_to_timedelta(dauer)
         await member.timeout(delta, reason=f"Timeout von {ctx.author}")
         await ctx.send(f"⏱️ {member.mention} wurde für **{dauer}** in den Timeout gesetzt.")
+    except discord.Forbidden:
+        await ctx.send("❌ Ich habe keine Berechtigung, diesen Nutzer zu timeouten.")
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
 @bot.command(name="endtimeout")
 @commands.has_permissions(moderate_members=True)
-async def endtimeout_cmd(ctx: commands.Context, member: discord.Member):
+async def endtimeout_cmd(ctx: commands.Context, member: discord.Member = None):
+    if not member:
+        await ctx.send("❌ Bitte gib einen Nutzer an, dessen Timeout beendet werden soll.")
+        return
     try:
         await member.timeout(None, reason=f"Timeout beendet von {ctx.author}")
         await ctx.send(f"✅ Timeout von {member.mention} wurde beendet.")
+    except discord.Forbidden:
+        await ctx.send("❌ Ich habe keine Berechtigung, den Timeout dieses Nutzers zu beenden.")
     except Exception as e:
         await ctx.send(f"❌ Fehler: {e}")
 
@@ -179,32 +209,68 @@ def find_role_exact(guild: discord.Guild, role_name: str):
 
 @bot.command(name="addrole")
 @commands.has_permissions(manage_roles=True)
-async def addrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
+async def addrole_cmd(ctx: commands.Context, member: discord.Member = None, *, role_name: str = None):
+    if not member:
+        await ctx.send("❌ Bitte gib einen Nutzer an, dem die Rolle hinzugefügt werden soll.")
+        return
+    if not role_name:
+        await ctx.send("❌ Bitte gib die Rolle an, die vergeben werden soll.")
+        return
+
+    role = find_role_exact(ctx.guild, role_name)
+    if not role:
+        await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** entspricht.")
+        return
+
+    if role >= ctx.guild.me.top_role:
+        await ctx.send("❌ Ich kann diese Rolle nicht vergeben, weil sie über meiner höchsten Rolle steht.")
+        return
+
+    if role >= member.top_role and member != ctx.author:
+        await ctx.send("❌ Du kannst diese Rolle nicht vergeben, weil sie über der höchsten Rolle des Nutzers liegt.")
+        return
+
     try:
-        role = find_role_exact(ctx.guild, role_name)
-        if not role:
-            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** entspricht.")
-            return
         await member.add_roles(role, reason=f"Rolle hinzugefügt von {ctx.author}")
         await ctx.send(f"✅ {member.mention} hat die Rolle **{role.name}** erhalten.")
+    except discord.Forbidden:
+        await ctx.send("❌ Ich habe keine Berechtigung, diese Rolle zu vergeben.")
     except Exception as e:
-        await ctx.send(f"❌ Fehler: {e}")
+        await ctx.send(f"❌ Unerwarteter Fehler: {e}")
 
 @bot.command(name="stealrole")
 @commands.has_permissions(manage_roles=True)
-async def stealrole_cmd(ctx: commands.Context, member: discord.Member, *, role_name: str):
+async def stealrole_cmd(ctx: commands.Context, member: discord.Member = None, *, role_name: str = None):
+    if not member:
+        await ctx.send("❌ Bitte gib einen Nutzer an, von dem die Rolle entfernt werden soll.")
+        return
+    if not role_name:
+        await ctx.send("❌ Bitte gib die Rolle an, die entfernt werden soll.")
+        return
+
+    role = find_role_exact(ctx.guild, role_name)
+    if not role:
+        await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** entspricht.")
+        return
+    if role not in member.roles:
+        await ctx.send(f"ℹ️ {member.mention} hat die Rolle **{role.name}** nicht.")
+        return
+
+    if role >= ctx.guild.me.top_role:
+        await ctx.send("❌ Ich kann diese Rolle nicht entfernen, weil sie über meiner höchsten Rolle steht.")
+        return
+
+    if role >= member.top_role and member != ctx.author:
+        await ctx.send("❌ Du kannst diese Rolle nicht entfernen, weil sie über der höchsten Rolle des Nutzers liegt.")
+        return
+
     try:
-        role = find_role_exact(ctx.guild, role_name)
-        if not role:
-            await ctx.send(f"❌ Keine Rolle gefunden, die **{role_name}** entspricht.")
-            return
-        if role not in member.roles:
-            await ctx.send(f"ℹ️ {member.mention} hat die Rolle **{role.name}** nicht.")
-            return
         await member.remove_roles(role, reason=f"Rolle entfernt von {ctx.author}")
         await ctx.send(f"✅ {member.mention} wurde die Rolle **{role.name}** entfernt.")
+    except discord.Forbidden:
+        await ctx.send("❌ Ich habe keine Berechtigung, diese Rolle zu entfernen.")
     except Exception as e:
-        await ctx.send(f"❌ Fehler: {e}")
+        await ctx.send(f"❌ Unerwarteter Fehler: {e}")
 
 # --------------------------- Blacklist + Trust Commands ---------------------------
 
