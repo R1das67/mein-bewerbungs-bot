@@ -49,7 +49,6 @@ class BewerbungModal(discord.ui.Modal):
         msg = await kanal.send(embed=embed, view=view)
         await interaction.response.send_message("✅ Deine Bewerbung wurde eingereicht!", ephemeral=True)
 
-
 # --- Persistent View für Bewerter: Lock + Review ---
 class BewerbungsBearbeitenView(discord.ui.View):
     def __init__(self, bewerber_id: int):
@@ -59,26 +58,35 @@ class BewerbungsBearbeitenView(discord.ui.View):
         for child in self.children:
             if isinstance(child, discord.ui.Button):
                 child.disabled = False
+        self.user_id = None
+        self.result_text = None  # Zeigt Status nach Ja/Nein
 
     def update_buttons(self):
         """Aktualisiert Buttons je nachdem, wer gerade die Bewerbung bearbeitet"""
         current_editor = bewerbung_locks.get(self.bewerber_id)
         for child in self.children:
             if isinstance(child, discord.ui.Button):
-                if child.custom_id in ["start_edit", "bewerbung_ja", "bewerbung_nein", "bewerbung_info"]:
-                    if current_editor and current_editor != getattr(self, "user_id", None):
+                if child.custom_id == "start_edit":
+                    if current_editor and current_editor != self.user_id:
                         child.disabled = True
-                        child.label = f"Wird von {bot.get_user(current_editor)} bearbeitet"
+                        child.label = f"Jemand bearbeitet bereits die Bewerbung"
                     else:
-                        if child.custom_id == "start_edit":
-                            child.label = "Bearbeite die Bewerbungsvorlage"
-                        else:
-                            child.label = {"bewerbung_ja": "✅ Ja", "bewerbung_nein": "❌ Nein", "bewerbung_info": "ℹ Info"}[child.custom_id]
+                        child.disabled = False
+                        child.label = "Bearbeite die Bewerbungsvorlage"
+                else:  # Ja/Nein/Info Buttons
+                    if self.result_text:  # Bewerbung abgeschlossen
+                        child.disabled = True
+                    elif current_editor and current_editor != self.user_id:
+                        child.disabled = True
+                        child.label = f"Jemand bearbeitet bereits die Bewerbung"
+                    else:
+                        child.disabled = False
+                        child.label = {"bewerbung_ja": "✅ Ja", "bewerbung_nein": "❌ Nein", "bewerbung_info": "ℹ Info"}[child.custom_id]
 
     @discord.ui.button(label="Bearbeite die Bewerbungsvorlage", style=discord.ButtonStyle.primary, custom_id="start_edit")
     async def start_edit(self, interaction: discord.Interaction, button: discord.ui.Button):
         if bewerbung_locks.get(self.bewerber_id):
-            await interaction.response.send_message("Die Bewerbung wird gerade von jemand anderem bearbeitet.", ephemeral=True)
+            await interaction.response.send_message("Jemand bearbeitet gerade diese Bewerbung.", ephemeral=True)
             return
         bewerbung_locks[self.bewerber_id] = interaction.user.id
         self.user_id = interaction.user.id
@@ -88,6 +96,9 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
     @discord.ui.button(label="✅ Ja", style=discord.ButtonStyle.green, custom_id="bewerbung_ja")
     async def ja_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.user_id:
+            await interaction.response.send_message('Klick auf den Knopf "Bearbeite die Bewerbungsvorlage", um die Knöpfe Ja, Nein, Info zu nutzen.', ephemeral=True)
+            return
         if bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
             await interaction.response.send_message("Jemand anderes bearbeitet gerade diese Bewerbung.", ephemeral=True)
             return
@@ -102,13 +113,17 @@ class BewerbungsBearbeitenView(discord.ui.View):
             accepted_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
             accepted_embed.timestamp = datetime.utcnow()
             await channel.send(embed=accepted_embed)
-        await interaction.response.send_message("Bewerbung angenommen.", ephemeral=True)
-        self.disable_all_items()
+        self.result_text = "✅ Bewerbung wurde angenommen"
+        self.update_buttons()
         bewerbung_locks.pop(self.bewerber_id, None)
-        await interaction.message.edit(view=self)
+        await interaction.message.edit(view=self, content=self.result_text)
+        await interaction.response.send_message("Bewerbung angenommen.", ephemeral=True)
 
     @discord.ui.button(label="❌ Nein", style=discord.ButtonStyle.red, custom_id="bewerbung_nein")
     async def nein_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.user_id:
+            await interaction.response.send_message('Klick auf den Knopf "Bearbeite die Bewerbungsvorlage", um die Knöpfe Ja, Nein, Info zu nutzen.', ephemeral=True)
+            return
         if bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
             await interaction.response.send_message("Jemand anderes bearbeitet gerade diese Bewerbung.", ephemeral=True)
             return
@@ -121,18 +136,21 @@ class BewerbungsBearbeitenView(discord.ui.View):
             rejected_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
             rejected_embed.timestamp = datetime.utcnow()
             await channel.send(embed=rejected_embed)
-        await interaction.response.send_message("Bewerbung abgelehnt.", ephemeral=True)
-        self.disable_all_items()
+        self.result_text = "❌ Bewerbung wurde abgelehnt"
+        self.update_buttons()
         bewerbung_locks.pop(self.bewerber_id, None)
-        await interaction.message.edit(view=self)
+        await interaction.message.edit(view=self, content=self.result_text)
+        await interaction.response.send_message("Bewerbung abgelehnt.", ephemeral=True)
 
     @discord.ui.button(label="ℹ Info", style=discord.ButtonStyle.blurple, custom_id="bewerbung_info")
     async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not self.user_id:
+            await interaction.response.send_message('Klick auf den Knopf "Bearbeite die Bewerbungsvorlage", um die Knöpfe Ja, Nein, Info zu nutzen.', ephemeral=True)
+            return
         if bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
             await interaction.response.send_message("Jemand anderes bearbeitet gerade diese Bewerbung.", ephemeral=True)
             return
         await interaction.response.send_modal(InfoModal(self.bewerber_id))
-
 
 # --- Modal für Info ---
 class InfoModal(discord.ui.Modal):
@@ -155,12 +173,10 @@ class InfoModal(discord.ui.Modal):
             await channel.send(embed=info_embed)
         await interaction.response.send_message("Info gesendet.", ephemeral=True)
 
-
 # --- Command zum Starten ---
 @bot.command()
 async def bewerben(ctx):
     await ctx.send("📋 Klicke auf den Button, um die Bewerbung zu starten:", view=StartBewerbungView())
-
 
 # --- Start-Button View ---
 class StartBewerbungView(discord.ui.View):
@@ -172,13 +188,11 @@ class StartBewerbungView(discord.ui.View):
         modal = BewerbungModal()
         await interaction.response.send_modal(modal)
 
-
 # --- Bot Events ---
 @bot.event
 async def on_ready():
     bot.add_view(StartBewerbungView())  # Persistent Start
     print(f"✅ Eingeloggt als {bot.user}")
-
 
 if __name__ == "__main__":
     bot.run(os.getenv("DISCORD_TOKEN"))
