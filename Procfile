@@ -1,1 +1,1 @@
-worker: python cardo.py
+worker: python bewerbung.py
