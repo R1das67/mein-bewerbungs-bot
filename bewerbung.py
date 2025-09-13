@@ -18,11 +18,28 @@ MEMBER2_ID = 1416459872278675567
 class BewerbungModal(discord.ui.Modal):
     def __init__(self):
         super().__init__(title="Bewerbungs Vorlage El Salvador")
-        self.roblox_name = discord.ui.TextInput(label="Frage 1: Dein Roblox Name?")
-        self.warum_du_entdeckt = discord.ui.TextInput(label="Frage 2+3: Warum ausgerechnet du & wo hast du uns entdeckt?", style=discord.TextStyle.paragraph)
-        self.aim = discord.ui.TextInput(label="Frage 4: Dein Aim 1-10?")
-        self.kleidung = discord.ui.TextInput(label="Frage 5: Kannst du unsere Kleidung kaufen?")
-        self.plattform = discord.ui.TextInput(label="Frage 6: Auf welcher Plattform spielst du?")
+        self.roblox_name = discord.ui.TextInput(
+            label="Frage 1: Roblox Name?",
+            max_length=100
+        )
+        self.warum_du_entdeckt = discord.ui.TextInput(
+            label="Frage 2+3: Warum & wo entdeckt?",
+            style=discord.TextStyle.paragraph,
+            max_length=400
+        )
+        self.aim = discord.ui.TextInput(
+            label="Frage 4: Aim 1-10?",
+            max_length=50
+        )
+        self.kleidung = discord.ui.TextInput(
+            label="Frage 5: Kleidung kaufbar?",
+            max_length=50
+        )
+        self.plattform = discord.ui.TextInput(
+            label="Frage 6: Plattform?",
+            max_length=50
+        )
+
         self.add_item(self.roblox_name)
         self.add_item(self.warum_du_entdeckt)
         self.add_item(self.aim)
@@ -36,12 +53,13 @@ class BewerbungModal(discord.ui.Modal):
             description=f"Von: {interaction.user.mention}",
             color=discord.Color.blue()
         )
-        embed.add_field(name="Frage 1: Dein Roblox Name?", value=self.roblox_name.value, inline=False)
-        embed.add_field(name="Frage 2+3: Warum ausgerechnet du & wo hast du uns entdeckt?", value=self.warum_du_entdeckt.value, inline=False)
-        embed.add_field(name="Frage 4: Dein Aim 1-10?", value=self.aim.value, inline=False)
-        embed.add_field(name="Frage 5: Kannst du unsere Kleidung kaufen?", value=self.kleidung.value, inline=False)
-        embed.add_field(name="Frage 6: Auf welcher Plattform spielst du?", value=self.plattform.value, inline=False)
+        embed.add_field(name="Frage 1: Roblox Name?", value=self.roblox_name.value, inline=False)
+        embed.add_field(name="Frage 2+3: Warum & wo entdeckt?", value=self.warum_du_entdeckt.value, inline=False)
+        embed.add_field(name="Frage 4: Aim 1-10?", value=self.aim.value, inline=False)
+        embed.add_field(name="Frage 5: Kleidung kaufbar?", value=self.kleidung.value, inline=False)
+        embed.add_field(name="Frage 6: Plattform?", value=self.plattform.value, inline=False)
         embed.set_footer(text=f"LG {interaction.user.display_name}")
+
         view = BewerbungReviewView(interaction.user.id)
         await kanal.send(embed=embed, view=view)
         await interaction.response.send_message("✅ Deine Bewerbung wurde eingereicht!", ephemeral=True)
@@ -65,12 +83,14 @@ class BewerbungReviewView(discord.ui.View):
             accepted_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
             accepted_embed.timestamp = datetime.utcnow()
             await interaction.channel.send(embed=accepted_embed)
+
             log_channel = bot.get_channel(PROTOKOLL_KANAL_ID)
             log_embed = discord.Embed(title="📋 Bewerbungs-Protokoll", color=discord.Color.green)
             log_embed.add_field(name="Wer", value=member.mention, inline=False)
             log_embed.add_field(name="Wann", value=datetime.now().strftime("%d.%m.%Y %H:%M:%S"), inline=False)
             log_embed.add_field(name="Von wem angenommen", value=interaction.user.mention, inline=False)
             await log_channel.send(embed=log_embed)
+
         await interaction.response.send_message("Bewerbung angenommen.", ephemeral=True)
         self.disable_all_items()
         await interaction.message.edit(view=self)
@@ -87,12 +107,14 @@ class BewerbungReviewView(discord.ui.View):
             rejected_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
             rejected_embed.timestamp = datetime.utcnow()
             await interaction.channel.send(embed=rejected_embed)
+
             log_channel = bot.get_channel(PROTOKOLL_KANAL_ID)
             log_embed = discord.Embed(title="📋 Bewerbungs-Protokoll", color=discord.Color.red)
             log_embed.add_field(name="Wer", value=member.mention, inline=False)
             log_embed.add_field(name="Wann", value=datetime.now().strftime("%d.%m.%Y %H:%M:%S"), inline=False)
             log_embed.add_field(name="Von wem abgelehnt", value=interaction.user.mention, inline=False)
             await log_channel.send(embed=log_embed)
+
         await interaction.response.send_message("Bewerbung abgelehnt.", ephemeral=True)
         self.disable_all_items()
         await interaction.message.edit(view=self)
@@ -106,7 +128,7 @@ class InfoModal(discord.ui.Modal):
     def __init__(self, bewerber_id: int):
         super().__init__(title="Zusatzinfo")
         self.bewerber_id = bewerber_id
-        self.info = discord.ui.TextInput(label="Kommentar", style=discord.TextStyle.paragraph)
+        self.info = discord.ui.TextInput(label="Kommentar", style=discord.TextStyle.paragraph, max_length=400)
         self.add_item(self.info)
 
     async def on_submit(self, interaction: discord.Interaction):
@@ -128,6 +150,7 @@ class InfoModal(discord.ui.Modal):
 async def bewerben(ctx):
     await ctx.send("📋 Klicke auf den Button, um die Bewerbung zu starten:", view=StartBewerbungView())
 
+# --- Start-Button View ---
 class StartBewerbungView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -139,7 +162,7 @@ class StartBewerbungView(discord.ui.View):
 
 @bot.event
 async def on_ready():
-    bot.add_view(StartBewerbungView())
+    bot.add_view(StartBewerbungView())  # persistent
     print(f"✅ Eingeloggt als {bot.user}")
 
 if __name__ == "__main__":
