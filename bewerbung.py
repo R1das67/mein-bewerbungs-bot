@@ -163,5 +163,6 @@ class StartBewerbungView(discord.ui.View):
         await interaction.response.send_modal(BewerbungModal())
 
 # --- Start ---
-if _name_ == "_main_":
+if __name__ == "__main__":
     bot.run(os.getenv("DISCORD_TOKEN"))
+
