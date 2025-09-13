@@ -55,7 +55,10 @@ class BewerbungsBearbeitenView(discord.ui.View):
     def __init__(self, bewerber_id: int):
         super().__init__(timeout=None)
         self.bewerber_id = bewerber_id
-        self.set_all_enabled(True)
+        # Buttons korrekt initialisieren
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = False
 
     def update_buttons(self):
         """Aktualisiert Buttons je nachdem, wer gerade die Bewerbung bearbeitet"""
@@ -63,7 +66,7 @@ class BewerbungsBearbeitenView(discord.ui.View):
         for child in self.children:
             if isinstance(child, discord.ui.Button):
                 if child.custom_id in ["start_edit", "bewerbung_ja", "bewerbung_nein", "bewerbung_info"]:
-                    if current_editor and current_editor != self.user_id:
+                    if current_editor and current_editor != getattr(self, "user_id", None):
                         child.disabled = True
                         child.label = f"Wird von {bot.get_user(current_editor)} bearbeitet"
                     else:
