@@ -5,6 +5,7 @@ from datetime import datetime
 
 intents = discord.Intents.default()
 intents.members = True
+intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # IDs anpassen
@@ -165,4 +166,5 @@ class StartBewerbungView(discord.ui.View):
 # --- Start ---
 if __name__ == "__main__":
     bot.run(os.getenv("DISCORD_TOKEN"))
+
 
