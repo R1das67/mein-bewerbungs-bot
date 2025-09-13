@@ -17,7 +17,7 @@ MEMBER2_ID = 1416459872278675567            # Rolle 2
 # --- Modal für Bewerber ---
 class BewerbungModal(discord.ui.Modal):
     def _init_(self):
-        super()._init_(title="Bewerbungs Vorlage El Salvador")
+        super().__init__(title="Bewerbungs Vorlage El Salvador")
 
         self.roblox_name = discord.ui.TextInput(label="Frage 1: Dein Roblox Name?")
         self.warum_du = discord.ui.TextInput(label="Frage 2: Warum ausgerechnet du?", style=discord.TextStyle.paragraph)
@@ -55,7 +55,7 @@ class BewerbungModal(discord.ui.Modal):
 
 # --- View für Bewerter ---
 class BewerbungReviewView(discord.ui.View):
-    def _init_(self, bewerber_id: int):
+    def __init__(self, bewerber_id: int):
         super()._init_(timeout=None)
         self.bewerber_id = bewerber_id
 
@@ -131,7 +131,7 @@ class BewerbungReviewView(discord.ui.View):
 
 # --- Modal für Info ---
 class InfoModal(discord.ui.Modal):
-    def _init_(self, bewerber_id: int):
+    def __init__(self, bewerber_id: int):
         super()._init_(title="Zusatzinfo")
         self.bewerber_id = bewerber_id
         self.info = discord.ui.TextInput(label="Kommentar", style=discord.TextStyle.paragraph)
@@ -166,5 +166,6 @@ class StartBewerbungView(discord.ui.View):
 # --- Start ---
 if __name__ == "__main__":
     bot.run(os.getenv("DISCORD_TOKEN"))
+
 
 
