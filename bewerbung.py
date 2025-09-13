@@ -63,13 +63,10 @@ class BewerbungReviewView(discord.ui.View):
     async def ja_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         member = interaction.guild.get_member(self.bewerber_id)
         if member:
-            # Rollen vergeben
             await member.add_roles(
                 interaction.guild.get_role(MEMBER1_ID),
                 interaction.guild.get_role(MEMBER2_ID)
             )
-
-            # Annahme-Embed ins Server schicken
             accepted_embed = discord.Embed(
                 title="🎉 Bewerbung angenommen",
                 description=f"{member.mention} wurde erfolgreich aufgenommen!",
@@ -77,10 +74,8 @@ class BewerbungReviewView(discord.ui.View):
             )
             accepted_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
             accepted_embed.timestamp = datetime.utcnow()
-
             await interaction.channel.send(embed=accepted_embed)
 
-            # Protokollieren
             log_channel = bot.get_channel(PROTOKOLL_KANAL_ID)
             log_embed = discord.Embed(
                 title="📋 Bewerbungs-Protokoll",
@@ -99,7 +94,6 @@ class BewerbungReviewView(discord.ui.View):
     async def nein_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         member = interaction.guild.get_member(self.bewerber_id)
         if member:
-            # Ablehnung-Embed
             rejected_embed = discord.Embed(
                 title="❌ Bewerbung abgelehnt",
                 description=f"Die Bewerbung von {member.mention} wurde leider abgelehnt.",
@@ -107,10 +101,8 @@ class BewerbungReviewView(discord.ui.View):
             )
             rejected_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
             rejected_embed.timestamp = datetime.utcnow()
-
             await interaction.channel.send(embed=rejected_embed)
 
-            # Protokollieren
             log_channel = bot.get_channel(PROTOKOLL_KANAL_ID)
             log_embed = discord.Embed(
                 title="📋 Bewerbungs-Protokoll",
@@ -148,7 +140,6 @@ class InfoModal(discord.ui.Modal):
             info_embed.add_field(name="Kommentar", value=self.info.value, inline=False)
             info_embed.add_field(name="Von wem", value=interaction.user.mention, inline=False)
             info_embed.timestamp = datetime.utcnow()
-
             await interaction.channel.send(embed=info_embed)
 
         await interaction.response.send_message("Info gesendet.", ephemeral=True)
@@ -161,7 +152,8 @@ async def bewerben(ctx):
 class StartBewerbungView(discord.ui.View):
     @discord.ui.button(label="📝 Bewerbung starten", style=discord.ButtonStyle.primary)
     async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(BewerbungModal())
+        modal = BewerbungModal()
+        await interaction.response.send_modal(modal)
 
 @bot.event
 async def on_ready():
