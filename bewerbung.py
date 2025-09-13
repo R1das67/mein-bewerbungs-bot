@@ -23,7 +23,7 @@ class BewerbungModal(discord.ui.Modal):
             label="Frage 1: Roblox Name?", max_length=100
         )
         self.warum_du_entdeckt = discord.ui.TextInput(
-            label="Frage 2+3: Warum du? & Wo hast du uns entdeckt?",
+            label="Frage 2+3: Warum du? & Woher kennst du uns?",
             style=discord.TextStyle.paragraph,
             max_length=400
         )
@@ -160,3 +160,4 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(os.getenv("DISCORD_TOKEN"))
+
