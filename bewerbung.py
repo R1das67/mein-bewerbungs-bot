@@ -163,10 +163,11 @@ class StartBewerbungView(discord.ui.View):
     async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(BewerbungModal())
 
+@bot.event
+async def on_ready():
+    bot.add_view(StartBewerbungView())  # macht den Start-Button persistent
+    print(f"✅ Eingeloggt als {bot.user}")
+
 # --- Start ---
 if __name__ == "__main__":
     bot.run(os.getenv("DISCORD_TOKEN"))
-
-
-
-
