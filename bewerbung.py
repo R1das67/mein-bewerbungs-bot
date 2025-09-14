@@ -11,9 +11,9 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # --- IDs ---
 BEWERBUNGS_KANAL_ID = 1410687834615971969
 SEPARATER_KANAL_ID = 1416506000864841880
-MEMBER1_ID = 1410687834326827042
-MEMBER2_ID = 1410687834326827043
-REMOVE_ROLE_ID = 1410687834326827039
+MEMBER1_ID = 1394071445125992639
+MEMBER2_ID = 1398301896967454862
+REMOVE_ROLE_ID = 1394071445713457284
 
 # --- Global Lock Dictionary ---
 bewerbung_locks = {}  # {bewerber_id: user_id}
@@ -196,4 +196,5 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(os.getenv("DISCORD_TOKEN"))
+
 
