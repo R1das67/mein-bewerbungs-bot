@@ -1,6 +1,7 @@
 import os
 import discord
 from discord.ext import commands
+from discord import app_commands
 from datetime import datetime
 
 intents = discord.Intents.default()
@@ -8,12 +9,9 @@ intents.members = True
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# --- IDs ---
-BEWERBUNGS_KANAL_ID = 1410687834615971969
-SEPARATER_KANAL_ID = 1416506000864841880
-MEMBER1_ID = 1394071445125992639
-MEMBER2_ID = 1398301896967454862
-REMOVE_ROLE_ID = 1394071445713457284
+# --- Guild Configs ---
+# Struktur: { guild_id: {"bewerbungs_kanal": int, "separater_kanal": int, "give_roles": [int], "remove_roles": [int]} }
+guild_configs = {}
 
 # --- Global Lock Dictionary ---
 bewerbung_locks = {}  # {bewerber_id: user_id}
@@ -34,7 +32,12 @@ class BewerbungModal(discord.ui.Modal):
         self.add_item(self.plattform)
 
     async def on_submit(self, interaction: discord.Interaction):
-        kanal = bot.get_channel(BEWERBUNGS_KANAL_ID)
+        config = guild_configs.get(interaction.guild.id, {})
+        kanal = bot.get_channel(config.get("bewerbungs_kanal"))
+        if not kanal:
+            await interaction.response.send_message("❌ Kein Bewerbungskanal gesetzt! Bitte Admin fragen.", ephemeral=True)
+            return
+
         embed = discord.Embed(title="Bewerbungs Vorlage Atrax",
                               description=f"Von: {interaction.user.mention}",
                               color=discord.Color.blue())
@@ -46,42 +49,38 @@ class BewerbungModal(discord.ui.Modal):
         embed.set_footer(text=f"LG {interaction.user.display_name}")
 
         view = BewerbungsBearbeitenView(interaction.user.id)
-        msg = await kanal.send(embed=embed, view=view)
+        await kanal.send(embed=embed, view=view)
         await interaction.response.send_message("✅ Deine Bewerbung wurde eingereicht!", ephemeral=True)
 
-# --- Persistent View für Bewerter: Lock + Review ---
+# --- Persistent View für Bewerter ---
 class BewerbungsBearbeitenView(discord.ui.View):
     def __init__(self, bewerber_id: int):
         super().__init__(timeout=None)
         self.bewerber_id = bewerber_id
-        # Buttons korrekt initialisieren
-        for child in self.children:
-            if isinstance(child, discord.ui.Button):
-                child.disabled = False
         self.user_id = None
-        self.result_text = None  # Zeigt Status nach Ja/Nein
+        self.result_text = None
 
     def update_buttons(self):
-        """Aktualisiert Buttons je nachdem, wer gerade die Bewerbung bearbeitet"""
         current_editor = bewerbung_locks.get(self.bewerber_id)
         for child in self.children:
             if isinstance(child, discord.ui.Button):
                 if child.custom_id == "start_edit":
                     if current_editor and current_editor != self.user_id:
                         child.disabled = True
-                        child.label = f"Jemand bearbeitet bereits die Bewerbung"
+                        child.label = "Jemand bearbeitet bereits die Bewerbung"
                     else:
                         child.disabled = False
                         child.label = "Bearbeite die Bewerbungsvorlage"
-                else:  # Ja/Nein/Info Buttons
-                    if self.result_text:  # Bewerbung abgeschlossen
+                else:
+                    if self.result_text:
                         child.disabled = True
                     elif current_editor and current_editor != self.user_id:
                         child.disabled = True
-                        child.label = f"Jemand bearbeitet bereits die Bewerbung"
+                        child.label = "Jemand bearbeitet bereits die Bewerbung"
                     else:
+                        labels = {"bewerbung_ja": "✅ Ja", "bewerbung_nein": "❌ Nein", "bewerbung_info": "ℹ Info"}
                         child.disabled = False
-                        child.label = {"bewerbung_ja": "✅ Ja", "bewerbung_nein": "❌ Nein", "bewerbung_info": "ℹ Info"}[child.custom_id]
+                        child.label = labels[child.custom_id]
 
     @discord.ui.button(label="Bearbeite die Bewerbungsvorlage", style=discord.ButtonStyle.primary, custom_id="start_edit")
     async def start_edit(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -96,23 +95,31 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
     @discord.ui.button(label="✅ Ja", style=discord.ButtonStyle.green, custom_id="bewerbung_ja")
     async def ja_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.user_id:
-            await interaction.response.send_message('Klick auf den Knopf "Bearbeite die Bewerbungsvorlage", um die Knöpfe Ja, Nein, Info zu nutzen.', ephemeral=True)
+        if not self.user_id or bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
+            await interaction.response.send_message("Du musst zuerst die Bewerbung bearbeiten.", ephemeral=True)
             return
-        if bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
-            await interaction.response.send_message("Jemand anderes bearbeitet gerade diese Bewerbung.", ephemeral=True)
-            return
+
+        config = guild_configs.get(interaction.guild.id, {})
         member = interaction.guild.get_member(self.bewerber_id)
         if member:
-            await member.add_roles(interaction.guild.get_role(MEMBER1_ID), interaction.guild.get_role(MEMBER2_ID))
-            await member.remove_roles(interaction.guild.get_role(REMOVE_ROLE_ID))
-            channel = bot.get_channel(SEPARATER_KANAL_ID)
-            accepted_embed = discord.Embed(title="🎉 Bewerbung angenommen",
-                                           description=f"{member.mention} wurde erfolgreich aufgenommen!",
-                                           color=discord.Color.green())
-            accepted_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
-            accepted_embed.timestamp = datetime.utcnow()
-            await channel.send(embed=accepted_embed)
+            for rid in config.get("give_roles", []):
+                role = interaction.guild.get_role(rid)
+                if role:
+                    await member.add_roles(role)
+            for rid in config.get("remove_roles", []):
+                role = interaction.guild.get_role(rid)
+                if role:
+                    await member.remove_roles(role)
+
+            channel = bot.get_channel(config.get("separater_kanal"))
+            if channel:
+                accepted_embed = discord.Embed(title="🎉 Bewerbung angenommen",
+                                               description=f"{member.mention} wurde erfolgreich aufgenommen!",
+                                               color=discord.Color.green())
+                accepted_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
+                accepted_embed.timestamp = datetime.utcnow()
+                await channel.send(embed=accepted_embed)
+
         self.result_text = "✅ Bewerbung wurde angenommen"
         self.update_buttons()
         bewerbung_locks.pop(self.bewerber_id, None)
@@ -121,21 +128,22 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
     @discord.ui.button(label="❌ Nein", style=discord.ButtonStyle.red, custom_id="bewerbung_nein")
     async def nein_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.user_id:
-            await interaction.response.send_message('Klick auf den Knopf "Bearbeite die Bewerbungsvorlage", um die Knöpfe Ja, Nein, Info zu nutzen.', ephemeral=True)
+        if not self.user_id or bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
+            await interaction.response.send_message("Du musst zuerst die Bewerbung bearbeiten.", ephemeral=True)
             return
-        if bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
-            await interaction.response.send_message("Jemand anderes bearbeitet gerade diese Bewerbung.", ephemeral=True)
-            return
+
+        config = guild_configs.get(interaction.guild.id, {})
         member = interaction.guild.get_member(self.bewerber_id)
         if member:
-            channel = bot.get_channel(SEPARATER_KANAL_ID)
-            rejected_embed = discord.Embed(title="❌ Bewerbung abgelehnt",
-                                           description=f"Die Bewerbung von {member.mention} wurde leider abgelehnt.",
-                                           color=discord.Color.red())
-            rejected_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
-            rejected_embed.timestamp = datetime.utcnow()
-            await channel.send(embed=rejected_embed)
+            channel = bot.get_channel(config.get("separater_kanal"))
+            if channel:
+                rejected_embed = discord.Embed(title="❌ Bewerbung abgelehnt",
+                                               description=f"Die Bewerbung von {member.mention} wurde leider abgelehnt.",
+                                               color=discord.Color.red())
+                rejected_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
+                rejected_embed.timestamp = datetime.utcnow()
+                await channel.send(embed=rejected_embed)
+
         self.result_text = "❌ Bewerbung wurde abgelehnt"
         self.update_buttons()
         bewerbung_locks.pop(self.bewerber_id, None)
@@ -144,11 +152,8 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
     @discord.ui.button(label="ℹ Info", style=discord.ButtonStyle.blurple, custom_id="bewerbung_info")
     async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not self.user_id:
-            await interaction.response.send_message('Klick auf den Knopf "Bearbeite die Bewerbungsvorlage", um die Knöpfe Ja, Nein, Info zu nutzen.', ephemeral=True)
-            return
-        if bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
-            await interaction.response.send_message("Jemand anderes bearbeitet gerade diese Bewerbung.", ephemeral=True)
+        if not self.user_id or bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
+            await interaction.response.send_message("Du musst zuerst die Bewerbung bearbeiten.", ephemeral=True)
             return
         await interaction.response.send_modal(InfoModal(self.bewerber_id))
 
@@ -161,22 +166,19 @@ class InfoModal(discord.ui.Modal):
         self.add_item(self.info)
 
     async def on_submit(self, interaction: discord.Interaction):
+        config = guild_configs.get(interaction.guild.id, {})
         member = interaction.guild.get_member(self.bewerber_id)
         if member:
-            channel = bot.get_channel(SEPARATER_KANAL_ID)
-            info_embed = discord.Embed(title="ℹ Info zur Bewerbung",
-                                       description=f"{member.mention}, es gibt eine neue Info zu deiner Bewerbung:",
-                                       color=discord.Color.blue())
-            info_embed.add_field(name="Kommentar", value=self.info.value, inline=False)
-            info_embed.add_field(name="Von wem", value=interaction.user.mention, inline=False)
-            info_embed.timestamp = datetime.utcnow()
-            await channel.send(embed=info_embed)
+            channel = bot.get_channel(config.get("separater_kanal"))
+            if channel:
+                info_embed = discord.Embed(title="ℹ Info zur Bewerbung",
+                                           description=f"{member.mention}, es gibt eine neue Info zu deiner Bewerbung:",
+                                           color=discord.Color.blue())
+                info_embed.add_field(name="Kommentar", value=self.info.value, inline=False)
+                info_embed.add_field(name="Von wem", value=interaction.user.mention, inline=False)
+                info_embed.timestamp = datetime.utcnow()
+                await channel.send(embed=info_embed)
         await interaction.response.send_message("Info gesendet.", ephemeral=True)
-
-# --- Command zum Starten ---
-@bot.command()
-async def bewerben(ctx):
-    await ctx.send("📋 Klicke auf den Button, um die Bewerbung zu starten:", view=StartBewerbungView())
 
 # --- Start-Button View ---
 class StartBewerbungView(discord.ui.View):
@@ -188,13 +190,47 @@ class StartBewerbungView(discord.ui.View):
         modal = BewerbungModal()
         await interaction.response.send_modal(modal)
 
+# --- Slash Commands für Admin Config ---
+@bot.tree.command(name="bewerbungsvorlagen", description="Setzt den Kanal für Bewerbungen")
+@app_commands.checks.has_permissions(administrator=True)
+async def bewerbungsvorlagen(interaction: discord.Interaction, kanal: discord.TextChannel):
+    guild_configs.setdefault(interaction.guild.id, {})
+    guild_configs[interaction.guild.id]["bewerbungs_kanal"] = kanal.id
+    await interaction.response.send_message(f"✅ Bewerbungen werden ab jetzt nach {kanal.mention} gesendet.", ephemeral=True)
+
+@bot.tree.command(name="info-zur-bewerbung", description="Setzt den Kanal für Infos zur Bewerbung")
+@app_commands.checks.has_permissions(administrator=True)
+async def info_zur_bewerbung(interaction: discord.Interaction, kanal: discord.TextChannel):
+    guild_configs.setdefault(interaction.guild.id, {})
+    guild_configs[interaction.guild.id]["separater_kanal"] = kanal.id
+    await interaction.response.send_message(f"✅ Infos werden ab jetzt nach {kanal.mention} gesendet.", ephemeral=True)
+
+@bot.tree.command(name="give-role", description="Setzt Rollen, die Bewerber nach Annahme erhalten")
+@app_commands.checks.has_permissions(administrator=True)
+async def give_role(interaction: discord.Interaction, *rollen: discord.Role):
+    guild_configs.setdefault(interaction.guild.id, {})
+    guild_configs[interaction.guild.id]["give_roles"] = [r.id for r in rollen]
+    rollen_namen = ", ".join([r.mention for r in rollen])
+    await interaction.response.send_message(f"✅ Folgende Rollen werden vergeben: {rollen_namen}", ephemeral=True)
+
+@bot.tree.command(name="remove-role", description="Setzt Rollen, die nach Annahme entfernt werden")
+@app_commands.checks.has_permissions(administrator=True)
+async def remove_role(interaction: discord.Interaction, *rollen: discord.Role):
+    guild_configs.setdefault(interaction.guild.id, {})
+    guild_configs[interaction.guild.id]["remove_roles"] = [r.id for r in rollen]
+    rollen_namen = ", ".join([r.mention for r in rollen])
+    await interaction.response.send_message(f"✅ Folgende Rollen werden entfernt: {rollen_namen}", ephemeral=True)
+
 # --- Bot Events ---
 @bot.event
 async def on_ready():
-    bot.add_view(StartBewerbungView())  # Persistent Start
+    bot.add_view(StartBewerbungView())
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Slash-Commands synchronisiert: {len(synced)}")
+    except Exception as e:
+        print(f"Fehler beim Sync: {e}")
     print(f"✅ Eingeloggt als {bot.user}")
 
 if __name__ == "__main__":
     bot.run(os.getenv("DISCORD_TOKEN"))
-
-
