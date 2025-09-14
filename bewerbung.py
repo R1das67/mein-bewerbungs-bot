@@ -22,7 +22,6 @@ guild_configs = {}
 # --- Global Lock Dictionary ---
 bewerbung_locks = {}  # {bewerber_id: user_id}
 
-
 # --- Modal für Bewerber ---
 class BewerbungModal(discord.ui.Modal):
     def __init__(self):
@@ -219,18 +218,26 @@ class StartBewerbungView(discord.ui.View):
         await interaction.response.send_modal(BewerbungModal())
 
 
-# --- Commands für Admins ---
-@bot.tree.command(name="set-bewerbungsvorlagen", description="Setzt den Kanal für Bewerbungen")
+# --- Commands für Admins (mit Kanal-ID statt Dropdown) ---
+@bot.tree.command(name="set-bewerbungsvorlagen", description="Setzt den Kanal für Bewerbungen (ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def set_bewerbungsvorlagen(interaction: discord.Interaction, kanal: discord.TextChannel):
+async def set_bewerbungsvorlagen(interaction: discord.Interaction, kanal_id: str):
+    kanal = bot.get_channel(int(kanal_id))
+    if not kanal or not isinstance(kanal, discord.TextChannel):
+        await interaction.response.send_message("❌ Ungültige Kanal-ID.", ephemeral=True)
+        return
     guild_configs.setdefault(interaction.guild.id, {})
     guild_configs[interaction.guild.id]["bewerbung_channel"] = kanal.id
     await interaction.response.send_message(f"✅ Bewerbungskanal gesetzt auf {kanal.mention}", ephemeral=True)
 
 
-@bot.tree.command(name="set-info-kanal", description="Setzt den Info/Seperater-Kanal für Bewerbungen")
+@bot.tree.command(name="set-info-kanal", description="Setzt den Info/Seperater-Kanal für Bewerbungen (ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def set_info_kanal(interaction: discord.Interaction, kanal: discord.TextChannel):
+async def set_info_kanal(interaction: discord.Interaction, kanal_id: str):
+    kanal = bot.get_channel(int(kanal_id))
+    if not kanal or not isinstance(kanal, discord.TextChannel):
+        await interaction.response.send_message("❌ Ungültige Kanal-ID.", ephemeral=True)
+        return
     guild_configs.setdefault(interaction.guild.id, {})
     guild_configs[interaction.guild.id]["info_channel"] = kanal.id
     await interaction.response.send_message(f"✅ Info-Kanal gesetzt auf {kanal.mention}", ephemeral=True)
