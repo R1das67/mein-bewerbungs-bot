@@ -21,7 +21,7 @@ bewerbung_locks = {}  # {bewerber_id: user_id}
 # --- Modal für Bewerber ---
 class BewerbungModal(discord.ui.Modal):
     def __init__(self):
-        super().__init__(title="Bewerbungs Vorlage El Salvador")
+        super().__init__(title="Bewerbungs Vorlage Atrax")
         self.roblox_name = discord.ui.TextInput(label="Frage 1: Roblox Name?", max_length=100)
         self.warum_du_entdeckt = discord.ui.TextInput(label="Frage 2+3: Warum du? & Woher kennst du uns?", style=discord.TextStyle.paragraph, max_length=400)
         self.aim = discord.ui.TextInput(label="Frage 4: Aim 1-10?", max_length=50)
@@ -35,7 +35,7 @@ class BewerbungModal(discord.ui.Modal):
 
     async def on_submit(self, interaction: discord.Interaction):
         kanal = bot.get_channel(BEWERBUNGS_KANAL_ID)
-        embed = discord.Embed(title="Bewerbungs Vorlage El Salvador",
+        embed = discord.Embed(title="Bewerbungs Vorlage Atrax",
                               description=f"Von: {interaction.user.mention}",
                               color=discord.Color.blue())
         embed.add_field(name="Frage 1: Roblox Name?", value=self.roblox_name.value, inline=False)
@@ -196,3 +196,4 @@ async def on_ready():
 
 if __name__ == "__main__":
     bot.run(os.getenv("DISCORD_TOKEN"))
+
