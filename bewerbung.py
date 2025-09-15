@@ -247,31 +247,43 @@ async def set_info_kanal(interaction: discord.Interaction, kanal_id: str):
     save_configs()
     await interaction.response.send_message(f"✅ Info-Kanal gesetzt auf {kanal.mention}", ephemeral=True)
 
-@bot.tree.command(name="give-role", description="Setzt die Hauptrolle, die Bewerber nach Annahme erhalten")
+@bot.tree.command(name="give-role", description="Setzt die Hauptrolle, die Bewerber nach Annahme erhalten (per ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def give_role(interaction: discord.Interaction, rolle: discord.Role):
+async def give_role(interaction: discord.Interaction, role_id: str):
+    role = interaction.guild.get_role(int(role_id))
+    if not role:
+        await interaction.response.send_message("❌ Ungültige Rollen-ID.", ephemeral=True)
+        return
     guild_configs.setdefault(str(interaction.guild.id), {})
-    guild_configs[str(interaction.guild.id)]["give_role"] = rolle.id
+    guild_configs[str(interaction.guild.id)]["give_role"] = role.id
     save_configs()
-    await interaction.response.send_message(f"✅ Hauptrolle {rolle.mention} wird vergeben.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Hauptrolle {role.mention} wird vergeben.", ephemeral=True)
 
-@bot.tree.command(name="add-role", description="Fügt eine zusätzliche Rolle hinzu, die Bewerber nach Annahme erhalten")
+@bot.tree.command(name="add-role", description="Fügt eine zusätzliche Rolle hinzu, die Bewerber nach Annahme erhalten (per ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def add_role(interaction: discord.Interaction, rolle: discord.Role):
+async def add_role(interaction: discord.Interaction, role_id: str):
+    role = interaction.guild.get_role(int(role_id))
+    if not role:
+        await interaction.response.send_message("❌ Ungültige Rollen-ID.", ephemeral=True)
+        return
     guild_configs.setdefault(str(interaction.guild.id), {})
     guild_configs[str(interaction.guild.id)].setdefault("add_roles", [])
-    if rolle.id not in guild_configs[str(interaction.guild.id)]["add_roles"]:
-        guild_configs[str(interaction.guild.id)]["add_roles"].append(rolle.id)
+    if role.id not in guild_configs[str(interaction.guild.id)]["add_roles"]:
+        guild_configs[str(interaction.guild.id)]["add_roles"].append(role.id)
     save_configs()
-    await interaction.response.send_message(f"✅ Zusatzrolle {rolle.mention} wird vergeben.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Zusatzrolle {role.mention} wird vergeben.", ephemeral=True)
 
-@bot.tree.command(name="remove-role", description="Setzt die Rolle, die Bewerber nach Annahme entfernt wird")
+@bot.tree.command(name="remove-role", description="Setzt die Rolle, die Bewerber nach Annahme entfernt wird (per ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def remove_role(interaction: discord.Interaction, rolle: discord.Role):
+async def remove_role(interaction: discord.Interaction, role_id: str):
+    role = interaction.guild.get_role(int(role_id))
+    if not role:
+        await interaction.response.send_message("❌ Ungültige Rollen-ID.", ephemeral=True)
+        return
     guild_configs.setdefault(str(interaction.guild.id), {})
-    guild_configs[str(interaction.guild.id)]["remove_role"] = rolle.id
+    guild_configs[str(interaction.guild.id)]["remove_role"] = role.id
     save_configs()
-    await interaction.response.send_message(f"✅ Rolle {rolle.mention} wird entfernt.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Rolle {role.mention} wird entfernt.", ephemeral=True)
 
 # --- Neue Commands für Bewerbungsformular ---
 @bot.tree.command(name="set-bewerbungs-titel", description="Setzt den Titel des Bewerbungsformulars")
