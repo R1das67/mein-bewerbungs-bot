@@ -223,17 +223,25 @@ class StartBewerbungView(discord.ui.View):
         await interaction.response.send_modal(BewerbungModal(interaction.guild.id))
 
 # --- Commands für Admins ---
-@bot.tree.command(name="set-bewerbungsvorlagen", description="Setzt den Kanal für Bewerbungen")
+@bot.tree.command(name="set-bewerbungsvorlagen", description="Setzt den Kanal für Bewerbungen (per ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def set_bewerbungsvorlagen(interaction: discord.Interaction, kanal: discord.TextChannel):
+async def set_bewerbungsvorlagen(interaction: discord.Interaction, kanal_id: str):
+    kanal = bot.get_channel(int(kanal_id))
+    if not kanal or not isinstance(kanal, discord.TextChannel):
+        await interaction.response.send_message("❌ Ungültige Kanal-ID.", ephemeral=True)
+        return
     guild_configs.setdefault(str(interaction.guild.id), {})
     guild_configs[str(interaction.guild.id)]["bewerbung_channel"] = kanal.id
     save_configs()
     await interaction.response.send_message(f"✅ Bewerbungskanal gesetzt auf {kanal.mention}", ephemeral=True)
 
-@bot.tree.command(name="set-info-kanal", description="Setzt den Info-Kanal für Bewerbungen")
+@bot.tree.command(name="set-info-kanal", description="Setzt den Info-Kanal für Bewerbungen (per ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def set_info_kanal(interaction: discord.Interaction, kanal: discord.TextChannel):
+async def set_info_kanal(interaction: discord.Interaction, kanal_id: str):
+    kanal = bot.get_channel(int(kanal_id))
+    if not kanal or not isinstance(kanal, discord.TextChannel):
+        await interaction.response.send_message("❌ Ungültige Kanal-ID.", ephemeral=True)
+        return
     guild_configs.setdefault(str(interaction.guild.id), {})
     guild_configs[str(interaction.guild.id)]["info_channel"] = kanal.id
     save_configs()
