@@ -223,6 +223,15 @@ class StartBewerbungView(discord.ui.View):
         await interaction.response.send_modal(BewerbungModal(interaction.guild.id))
 
 # --- Commands für Admins ---
+@bot.tree.command(name="bewerbung-starten", description="Sendet die Bewerbungsnachricht mit Button in diesen Kanal")
+@app_commands.checks.has_permissions(administrator=True)
+async def bewerbung_starten(interaction: discord.Interaction):
+    view = StartBewerbungView()
+    await interaction.channel.send(
+        "Klicke unten auf den Button, um deine Bewerbung zu starten:", view=view
+    )
+    await interaction.response.send_message("✅ Bewerbungsnachricht wurde gesendet.", ephemeral=True)
+
 @bot.tree.command(name="set-bewerbungsvorlagen", description="Setzt den Kanal für Bewerbungen (per ID)")
 @app_commands.checks.has_permissions(administrator=True)
 async def set_bewerbungsvorlagen(interaction: discord.Interaction, kanal_id: str):
