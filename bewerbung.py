@@ -96,9 +96,12 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
     @discord.ui.button(label="Bearbeite die Bewerbungsvorlage", style=discord.ButtonStyle.primary, custom_id="start_edit")
     async def start_edit(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if bewerbung_locks.get(self.bewerber_id):
+        current_editor = bewerbung_locks.get(self.bewerber_id)
+        if current_editor and current_editor != interaction.user.id:
             await interaction.response.send_message("Jemand bearbeitet gerade diese Bewerbung.", ephemeral=True)
             return
+
+        # Lock auf den aktuellen User setzen
         bewerbung_locks[self.bewerber_id] = interaction.user.id
         self.user_id = interaction.user.id
         self.update_buttons()
@@ -110,7 +113,8 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
     @discord.ui.button(label="✅ Ja", style=discord.ButtonStyle.green, custom_id="bewerbung_ja")
     async def ja_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
+        current_editor = bewerbung_locks.get(self.bewerber_id)
+        if current_editor and current_editor != interaction.user.id:
             await interaction.response.send_message("Du kannst diese Bewerbung nicht bearbeiten.", ephemeral=True)
             return
 
@@ -156,7 +160,8 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
     @discord.ui.button(label="❌ Nein", style=discord.ButtonStyle.red, custom_id="bewerbung_nein")
     async def nein_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
+        current_editor = bewerbung_locks.get(self.bewerber_id)
+        if current_editor and current_editor != interaction.user.id:
             await interaction.response.send_message("Du kannst diese Bewerbung nicht bearbeiten.", ephemeral=True)
             return
 
@@ -184,7 +189,8 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
     @discord.ui.button(label="ℹ Info", style=discord.ButtonStyle.blurple, custom_id="bewerbung_info")
     async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if bewerbung_locks.get(self.bewerber_id) != interaction.user.id:
+        current_editor = bewerbung_locks.get(self.bewerber_id)
+        if current_editor and current_editor != interaction.user.id:
             await interaction.response.send_message("Du kannst diese Bewerbung nicht bearbeiten.", ephemeral=True)
             return
         await interaction.response.send_modal(InfoModal(self.bewerber_id))
