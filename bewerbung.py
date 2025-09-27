@@ -3,7 +3,7 @@ import json
 import discord
 from discord.ext import commands
 from discord import app_commands
-from datetime import datetime
+from datetime import datetime, timezone
 
 CONFIG_FILE = "guild_configs.json"
 
@@ -146,7 +146,7 @@ class BewerbungsBearbeitenView(discord.ui.View):
                     color=discord.Color.green(),
                 )
                 accepted_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
-                accepted_embed.timestamp = datetime.utcnow()
+                accepted_embed.timestamp = datetime.now(timezone.utc)
                 await channel.send(embed=accepted_embed)
 
         self.result_text = "✅ Bewerbung wurde angenommen"
@@ -175,7 +175,7 @@ class BewerbungsBearbeitenView(discord.ui.View):
                 color=discord.Color.red(),
             )
             rejected_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
-            rejected_embed.timestamp = datetime.utcnow()
+            rejected_embed.timestamp = datetime.now(timezone.utc)
             await channel.send(embed=rejected_embed)
 
         self.result_text = "❌ Bewerbung wurde abgelehnt"
@@ -215,7 +215,7 @@ class InfoModal(discord.ui.Modal):
             )
             info_embed.add_field(name="Kommentar", value=self.info.value, inline=False)
             info_embed.add_field(name="Von wem", value=interaction.user.mention, inline=False)
-            info_embed.timestamp = datetime.utcnow()
+            info_embed.timestamp = datetime.now(timezone.utc)
             await channel.send(embed=info_embed)
         await interaction.response.send_message("Info gesendet.", ephemeral=True)
 
