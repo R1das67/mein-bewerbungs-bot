@@ -66,7 +66,7 @@ class BewerbungModal(discord.ui.Modal):
 
 # --- Persistent View für Bewerter ---
 class BewerbungsBearbeitenView(discord.ui.View):
-    def __init__(self, bewerber_id: int):
+    def __init__(self, bewerber_id: int | None = None):
         super().__init__(timeout=None)
         self.bewerber_id = bewerber_id
         self.user_id = None
@@ -332,7 +332,8 @@ async def clear_bewerbungsfragen(interaction: discord.Interaction):
 # --- Bot Events ---
 @bot.event
 async def on_ready():
-    bot.add_view(StartBewerbungView())  # Persistent Start Button
+    bot.add_view(StartBewerbungView())              # Start-Button persistent
+    bot.add_view(BewerbungsBearbeitenView())        # Bearbeitungs-Buttons persistent
     await bot.tree.sync()
     print(f"✅ Eingeloggt als {bot.user}")
 
