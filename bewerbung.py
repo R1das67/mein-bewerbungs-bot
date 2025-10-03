@@ -24,8 +24,6 @@ def save_configs():
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(guild_configs, f, indent=4, ensure_ascii=False)
 
-# --- Global Lock Dictionary ---
-bewerbung_locks = {}  # {bewerber_id: user_id}
 
 # --- Modal für Bewerber ---
 class BewerbungModal(discord.ui.Modal):
@@ -64,60 +62,22 @@ class BewerbungModal(discord.ui.Modal):
         await kanal.send(embed=embed, view=view)
         await interaction.response.send_message("✅ Deine Bewerbung wurde eingereicht!", ephemeral=True)
 
+
 # --- Persistent View für Bewerter ---
 class BewerbungsBearbeitenView(discord.ui.View):
     def __init__(self, bewerber_id: int | None = None):
         super().__init__(timeout=None)
         self.bewerber_id = bewerber_id
-        self.user_id = None
         self.result_text = None
 
     def update_buttons(self):
-        current_editor = bewerbung_locks.get(self.bewerber_id)
         for child in self.children:
             if isinstance(child, discord.ui.Button):
-                if child.custom_id == "start_edit":
-                    if current_editor and current_editor != self.user_id:
-                        child.disabled = True
-                        child.label = "Jemand bearbeitet bereits"
-                    else:
-                        child.disabled = False
-                        child.label = "Bearbeite die Bewerbungsvorlage"
-                else:
-                    if self.result_text:
-                        child.disabled = True
-                    elif current_editor and current_editor != self.user_id:
-                        child.disabled = True
-                        child.label = "Gesperrt"
-                    else:
-                        child.disabled = False
-                        labels = {"bewerbung_ja": "✅ Ja", "bewerbung_nein": "❌ Nein", "bewerbung_info": "ℹ Info"}
-                        child.label = labels[child.custom_id]
-
-    @discord.ui.button(label="Bearbeite die Bewerbungsvorlage", style=discord.ButtonStyle.primary, custom_id="start_edit")
-    async def start_edit(self, interaction: discord.Interaction, button: discord.ui.Button):
-        current_editor = bewerbung_locks.get(self.bewerber_id)
-        if current_editor and current_editor != interaction.user.id:
-            await interaction.response.send_message("Jemand bearbeitet gerade diese Bewerbung.", ephemeral=True)
-            return
-
-        # Lock auf den aktuellen User setzen
-        bewerbung_locks[self.bewerber_id] = interaction.user.id
-        self.user_id = interaction.user.id
-        self.update_buttons()
-        try:
-            await interaction.message.edit(view=self)
-        except discord.NotFound:
-            pass
-        await interaction.response.send_message("Du bearbeitest nun die Bewerbung.", ephemeral=True)
+                if self.result_text:  # Wenn schon entschieden wurde
+                    child.disabled = True
 
     @discord.ui.button(label="✅ Ja", style=discord.ButtonStyle.green, custom_id="bewerbung_ja")
     async def ja_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        current_editor = bewerbung_locks.get(self.bewerber_id)
-        if current_editor and current_editor != interaction.user.id:
-            await interaction.response.send_message("Du kannst diese Bewerbung nicht bearbeiten.", ephemeral=True)
-            return
-
         config = guild_configs.get(str(interaction.guild.id), {})
         member = interaction.guild.get_member(self.bewerber_id)
         if member:
@@ -151,7 +111,6 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
         self.result_text = "✅ Bewerbung wurde angenommen"
         self.update_buttons()
-        bewerbung_locks.pop(self.bewerber_id, None)
         try:
             await interaction.message.edit(view=self, content=self.result_text)
         except discord.NotFound:
@@ -160,11 +119,6 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
     @discord.ui.button(label="❌ Nein", style=discord.ButtonStyle.red, custom_id="bewerbung_nein")
     async def nein_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        current_editor = bewerbung_locks.get(self.bewerber_id)
-        if current_editor and current_editor != interaction.user.id:
-            await interaction.response.send_message("Du kannst diese Bewerbung nicht bearbeiten.", ephemeral=True)
-            return
-
         config = guild_configs.get(str(interaction.guild.id), {})
         member = interaction.guild.get_member(self.bewerber_id)
         if member and config.get("info_channel"):
@@ -180,7 +134,6 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
         self.result_text = "❌ Bewerbung wurde abgelehnt"
         self.update_buttons()
-        bewerbung_locks.pop(self.bewerber_id, None)
         try:
             await interaction.message.edit(view=self, content=self.result_text)
         except discord.NotFound:
@@ -189,11 +142,8 @@ class BewerbungsBearbeitenView(discord.ui.View):
 
     @discord.ui.button(label="ℹ Info", style=discord.ButtonStyle.blurple, custom_id="bewerbung_info")
     async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        current_editor = bewerbung_locks.get(self.bewerber_id)
-        if current_editor and current_editor != interaction.user.id:
-            await interaction.response.send_message("Du kannst diese Bewerbung nicht bearbeiten.", ephemeral=True)
-            return
         await interaction.response.send_modal(InfoModal(self.bewerber_id))
+
 
 # --- Modal für Info ---
 class InfoModal(discord.ui.Modal):
@@ -219,6 +169,7 @@ class InfoModal(discord.ui.Modal):
             await channel.send(embed=info_embed)
         await interaction.response.send_message("Info gesendet.", ephemeral=True)
 
+
 # --- Start-Button View ---
 class StartBewerbungView(discord.ui.View):
     def __init__(self):
@@ -227,6 +178,7 @@ class StartBewerbungView(discord.ui.View):
     @discord.ui.button(label="📝 Bewerbung starten", style=discord.ButtonStyle.primary, custom_id="start_bewerbung")
     async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(BewerbungModal(interaction.guild.id))
+
 
 # --- Commands für Admins ---
 @bot.tree.command(name="bewerbung-starten", description="Sendet die Bewerbungsnachricht mit Button in diesen Kanal")
@@ -328,6 +280,7 @@ async def clear_bewerbungsfragen(interaction: discord.Interaction):
     guild_configs[str(interaction.guild.id)]["questions"] = []
     save_configs()
     await interaction.response.send_message("✅ Alle Bewerbungsfragen wurden gelöscht.", ephemeral=True)
+
 
 # --- Bot Events ---
 @bot.event
