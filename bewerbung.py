@@ -24,6 +24,7 @@ def save_configs():
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(guild_configs, f, indent=4, ensure_ascii=False)
 
+LAVENDER_PURPLE = discord.Color.from_rgb(150, 123, 182)  # Neue Embed-Farbe
 
 # --- Modal für Bewerber ---
 class BewerbungModal(discord.ui.Modal):
@@ -51,7 +52,7 @@ class BewerbungModal(discord.ui.Modal):
         embed = discord.Embed(
             title=config.get("title", "Bewerbung"),
             description=f"Von: {interaction.user.mention}",
-            color=discord.Color.blue(),
+            color=LAVENDER_PURPLE,
         )
 
         for idx, answer in enumerate(self.answers, start=1):
@@ -61,7 +62,6 @@ class BewerbungModal(discord.ui.Modal):
         view = BewerbungsBearbeitenView(interaction.user.id)
         await kanal.send(embed=embed, view=view)
         await interaction.response.send_message("✅ Deine Bewerbung wurde eingereicht!", ephemeral=True)
-
 
 # --- Persistent View für Bewerter ---
 class BewerbungsBearbeitenView(discord.ui.View):
@@ -73,7 +73,7 @@ class BewerbungsBearbeitenView(discord.ui.View):
     def update_buttons(self):
         for child in self.children:
             if isinstance(child, discord.ui.Button):
-                if self.result_text:  # Wenn schon entschieden wurde
+                if self.result_text:
                     child.disabled = True
 
     @discord.ui.button(label="✅ Ja", style=discord.ButtonStyle.green, custom_id="bewerbung_ja")
@@ -103,7 +103,7 @@ class BewerbungsBearbeitenView(discord.ui.View):
                 accepted_embed = discord.Embed(
                     title="🎉 Bewerbung angenommen",
                     description=f"{member.mention} wurde erfolgreich aufgenommen!",
-                    color=discord.Color.green(),
+                    color=LAVENDER_PURPLE,
                 )
                 accepted_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
                 accepted_embed.timestamp = datetime.now(timezone.utc)
@@ -126,7 +126,7 @@ class BewerbungsBearbeitenView(discord.ui.View):
             rejected_embed = discord.Embed(
                 title="❌ Bewerbung abgelehnt",
                 description=f"Die Bewerbung von {member.mention} wurde leider abgelehnt.",
-                color=discord.Color.red(),
+                color=LAVENDER_PURPLE,
             )
             rejected_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
             rejected_embed.timestamp = datetime.now(timezone.utc)
@@ -144,7 +144,6 @@ class BewerbungsBearbeitenView(discord.ui.View):
     async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(InfoModal(self.bewerber_id))
 
-
 # --- Modal für Info ---
 class InfoModal(discord.ui.Modal):
     def __init__(self, bewerber_id: int):
@@ -161,14 +160,13 @@ class InfoModal(discord.ui.Modal):
             info_embed = discord.Embed(
                 title="ℹ Info zur Bewerbung",
                 description=f"{member.mention}, es gibt eine neue Info zu deiner Bewerbung:",
-                color=discord.Color.blue(),
+                color=LAVENDER_PURPLE,
             )
             info_embed.add_field(name="Kommentar", value=self.info.value, inline=False)
             info_embed.add_field(name="Von wem", value=interaction.user.mention, inline=False)
             info_embed.timestamp = datetime.now(timezone.utc)
             await channel.send(embed=info_embed)
         await interaction.response.send_message("Info gesendet.", ephemeral=True)
-
 
 # --- Start-Button View ---
 class StartBewerbungView(discord.ui.View):
@@ -179,20 +177,23 @@ class StartBewerbungView(discord.ui.View):
     async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(BewerbungModal(interaction.guild.id))
 
+# --- Panel 2 Commands (Original Admin Panel) ---
+# Hier kommen alle deine bisherigen Commands ohne Zahl (Panel 2)
+# ...
 
-# --- Commands für Admins ---
-@bot.tree.command(name="bewerbung-starten", description="Sendet die Bewerbungsnachricht mit Button in diesen Kanal")
+# --- Panel 3 Commands (komplett übernommen) ---
 @app_commands.checks.has_permissions(administrator=True)
-async def bewerbung_starten(interaction: discord.Interaction):
+@bot.tree.command(name="bewerbung-starten3", description="Panel 3: Bewerbungsnachricht")
+async def bewerbung_starten3(interaction: discord.Interaction):
     view = StartBewerbungView()
     await interaction.channel.send(
-        "Klicke unten auf den Button, um deine Bewerbung zu starten:", view=view
+        "Panel 3: Klicke unten auf den Button, um deine Bewerbung zu starten:", view=view
     )
-    await interaction.response.send_message("✅ Bewerbungsnachricht wurde gesendet.", ephemeral=True)
+    await interaction.response.send_message("✅ Panel 3 Bewerbungsnachricht gesendet.", ephemeral=True)
 
-@bot.tree.command(name="set-bewerbungsvorlagen", description="Setzt den Kanal für Bewerbungen (per ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def set_bewerbungsvorlagen(interaction: discord.Interaction, kanal_id: str):
+@bot.tree.command(name="set-bewerbungsvorlagen3", description="Panel 3: Setzt den Bewerbungskanal")
+async def set_bewerbungsvorlagen3(interaction: discord.Interaction, kanal_id: str):
     kanal = bot.get_channel(int(kanal_id))
     if not kanal or not isinstance(kanal, discord.TextChannel):
         await interaction.response.send_message("❌ Ungültige Kanal-ID.", ephemeral=True)
@@ -200,11 +201,11 @@ async def set_bewerbungsvorlagen(interaction: discord.Interaction, kanal_id: str
     guild_configs.setdefault(str(interaction.guild.id), {})
     guild_configs[str(interaction.guild.id)]["bewerbung_channel"] = kanal.id
     save_configs()
-    await interaction.response.send_message(f"✅ Bewerbungskanal gesetzt auf {kanal.mention}", ephemeral=True)
+    await interaction.response.send_message(f"✅ Panel 3 Bewerbungskanal gesetzt auf {kanal.mention}", ephemeral=True)
 
-@bot.tree.command(name="set-info-kanal", description="Setzt den Info-Kanal für Bewerbungen (per ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def set_info_kanal(interaction: discord.Interaction, kanal_id: str):
+@bot.tree.command(name="set-info-kanal3", description="Panel 3: Setzt den Info-Kanal")
+async def set_info_kanal3(interaction: discord.Interaction, kanal_id: str):
     kanal = bot.get_channel(int(kanal_id))
     if not kanal or not isinstance(kanal, discord.TextChannel):
         await interaction.response.send_message("❌ Ungültige Kanal-ID.", ephemeral=True)
@@ -212,11 +213,11 @@ async def set_info_kanal(interaction: discord.Interaction, kanal_id: str):
     guild_configs.setdefault(str(interaction.guild.id), {})
     guild_configs[str(interaction.guild.id)]["info_channel"] = kanal.id
     save_configs()
-    await interaction.response.send_message(f"✅ Info-Kanal gesetzt auf {kanal.mention}", ephemeral=True)
+    await interaction.response.send_message(f"✅ Panel 3 Info-Kanal gesetzt auf {kanal.mention}", ephemeral=True)
 
-@bot.tree.command(name="give-role", description="Setzt die Hauptrolle, die Bewerber nach Annahme erhalten (per ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def give_role(interaction: discord.Interaction, role_id: str):
+@bot.tree.command(name="give-role3", description="Panel 3: Setzt Hauptrolle für Bewerber")
+async def give_role3(interaction: discord.Interaction, role_id: str):
     role = interaction.guild.get_role(int(role_id))
     if not role:
         await interaction.response.send_message("❌ Ungültige Rollen-ID.", ephemeral=True)
@@ -224,11 +225,11 @@ async def give_role(interaction: discord.Interaction, role_id: str):
     guild_configs.setdefault(str(interaction.guild.id), {})
     guild_configs[str(interaction.guild.id)]["give_role"] = role.id
     save_configs()
-    await interaction.response.send_message(f"✅ Hauptrolle {role.mention} wird vergeben.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Panel 3 Hauptrolle {role.mention} wird vergeben.", ephemeral=True)
 
-@bot.tree.command(name="add-role", description="Fügt eine zusätzliche Rolle hinzu, die Bewerber nach Annahme erhalten (per ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def add_role(interaction: discord.Interaction, role_id: str):
+@bot.tree.command(name="add-role3", description="Panel 3: Zusätzliche Rolle für Bewerber")
+async def add_role3(interaction: discord.Interaction, role_id: str):
     role = interaction.guild.get_role(int(role_id))
     if not role:
         await interaction.response.send_message("❌ Ungültige Rollen-ID.", ephemeral=True)
@@ -238,11 +239,11 @@ async def add_role(interaction: discord.Interaction, role_id: str):
     if role.id not in guild_configs[str(interaction.guild.id)]["add_roles"]:
         guild_configs[str(interaction.guild.id)]["add_roles"].append(role.id)
     save_configs()
-    await interaction.response.send_message(f"✅ Zusatzrolle {role.mention} wird vergeben.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Panel 3 Zusatzrolle {role.mention} wird vergeben.", ephemeral=True)
 
-@bot.tree.command(name="remove-role", description="Setzt die Rolle, die Bewerber nach Annahme entfernt wird (per ID)")
 @app_commands.checks.has_permissions(administrator=True)
-async def remove_role(interaction: discord.Interaction, role_id: str):
+@bot.tree.command(name="remove-role3", description="Panel 3: Rolle wird entfernt")
+async def remove_role3(interaction: discord.Interaction, role_id: str):
     role = interaction.guild.get_role(int(role_id))
     if not role:
         await interaction.response.send_message("❌ Ungültige Rollen-ID.", ephemeral=True)
@@ -250,20 +251,19 @@ async def remove_role(interaction: discord.Interaction, role_id: str):
     guild_configs.setdefault(str(interaction.guild.id), {})
     guild_configs[str(interaction.guild.id)]["remove_role"] = role.id
     save_configs()
-    await interaction.response.send_message(f"✅ Rolle {role.mention} wird entfernt.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Panel 3 Rolle {role.mention} wird entfernt.", ephemeral=True)
 
-# --- Neue Commands für Bewerbungsformular ---
-@bot.tree.command(name="set-bewerbungs-titel", description="Setzt den Titel des Bewerbungsformulars")
 @app_commands.checks.has_permissions(administrator=True)
-async def set_bewerbungs_titel(interaction: discord.Interaction, titel: str):
+@bot.tree.command(name="set-bewerbungs-titel3", description="Panel 3: Setzt Bewerbungs-Titel")
+async def set_bewerbungs_titel3(interaction: discord.Interaction, titel: str):
     guild_configs.setdefault(str(interaction.guild.id), {})
     guild_configs[str(interaction.guild.id)]["title"] = titel
     save_configs()
-    await interaction.response.send_message(f"✅ Bewerbungs-Titel gesetzt auf: **{titel}**", ephemeral=True)
+    await interaction.response.send_message(f"✅ Panel 3 Bewerbungs-Titel gesetzt auf: **{titel}**", ephemeral=True)
 
-@bot.tree.command(name="add-bewerbungs-frage", description="Fügt eine Frage ins Bewerbungsformular ein")
 @app_commands.checks.has_permissions(administrator=True)
-async def add_bewerbungs_frage(interaction: discord.Interaction, frage: str, style: str = "short"):
+@bot.tree.command(name="add-bewerbungs-frage3", description="Panel 3: Fügt Bewerbungsfrage hinzu")
+async def add_bewerbungs_frage3(interaction: discord.Interaction, frage: str, style: str = "short"):
     guild_configs.setdefault(str(interaction.guild.id), {})
     guild_configs[str(interaction.guild.id)].setdefault("questions", [])
     if style not in ("short", "paragraph"):
@@ -271,22 +271,21 @@ async def add_bewerbungs_frage(interaction: discord.Interaction, frage: str, sty
         return
     guild_configs[str(interaction.guild.id)]["questions"].append({"label": frage, "style": style})
     save_configs()
-    await interaction.response.send_message(f"✅ Frage hinzugefügt: **{frage}** ({style})", ephemeral=True)
+    await interaction.response.send_message(f"✅ Panel 3 Frage hinzugefügt: **{frage}** ({style})", ephemeral=True)
 
-@bot.tree.command(name="clear-bewerbungsfragen", description="Löscht alle Bewerbungsfragen")
 @app_commands.checks.has_permissions(administrator=True)
-async def clear_bewerbungsfragen(interaction: discord.Interaction):
+@bot.tree.command(name="clear-bewerbungsfragen3", description="Panel 3: Löscht alle Bewerbungsfragen")
+async def clear_bewerbungsfragen3(interaction: discord.Interaction):
     guild_configs.setdefault(str(interaction.guild.id), {})
     guild_configs[str(interaction.guild.id)]["questions"] = []
     save_configs()
-    await interaction.response.send_message("✅ Alle Bewerbungsfragen wurden gelöscht.", ephemeral=True)
-
+    await interaction.response.send_message("✅ Panel 3: Alle Bewerbungsfragen wurden gelöscht.", ephemeral=True)
 
 # --- Bot Events ---
 @bot.event
 async def on_ready():
-    bot.add_view(StartBewerbungView())              # Start-Button persistent
-    bot.add_view(BewerbungsBearbeitenView())        # Bearbeitungs-Buttons persistent
+    bot.add_view(StartBewerbungView())
+    bot.add_view(BewerbungsBearbeitenView())
     await bot.tree.sync()
     print(f"✅ Eingeloggt als {bot.user}")
 
