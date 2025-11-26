@@ -78,7 +78,8 @@ class PanicModal(discord.ui.Modal, title="🚨 Panic Request"):
         embed.add_field(name="Location", value=self.location.value, inline=False)
         embed.add_field(name="Additional Information", value=self.additional_info.value or "Keine", inline=False)
 
-        await channel.send(f"**{role_ping} Panic Alert!**", embed=embed)
+        # Angepasste Nachricht
+        await channel.send(f"**__🚨{role_ping} panic!🚨__**", embed=embed)
         await interaction.response.send_message("✅ Panic Alert gesendet!", ephemeral=True)
 
 # -----------------------------
