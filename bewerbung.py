@@ -70,7 +70,7 @@ class PanicModal(discord.ui.Modal, title="🚨 Panic Request"):
         panic_role_id = data.get("panic_role")
         if panic_channel_id is None or panic_role_id is None:
             await interaction.response.send_message(
-                "❌ Panic-Server oder Member-Rolle nicht gesetzt! Nutze /set-panic-server & /set-panic-role",
+                "❌ Panic-Channel oder Member-Rolle nicht gesetzt! Nutze /set-panic-channel & /set-panic-role",
                 ephemeral=True
             )
             return
@@ -135,7 +135,7 @@ async def create_panic_button(interaction: discord.Interaction):
     await interaction.followup.send("✅ Panic button created!", ephemeral=True)
 
 
-@bot.tree.command(name="set-panic-server", description="Set the channel for panic alerts")
+@bot.tree.command(name="set-panic-channel", description="Set the channel for panic alerts")
 @app_commands.describe(channel="Channel where panic alerts will be sent")
 async def set_panic_server(interaction: discord.Interaction, channel: discord.TextChannel):
     if not is_admin(interaction):
@@ -266,3 +266,4 @@ async def on_ready():
 
 
 bot.run(TOKEN)
+
