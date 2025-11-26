@@ -271,22 +271,28 @@ async def check_agentblox_status():
             continue
         user_id = user_info["Id"]
         display_name = user_info["Username"]
-        # Beispiel Status: Online/Offline zufällig (da Roblox API das nicht direkt liefert)
+
+        # Status zufällig simuliert (Online/Offline)
         import random
         status = random.choice(["online", "offline"])
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         avatar_url = await fetch_avatar_thumbnail(user_id)
+
+        embed = discord.Embed(
+            title=f"**__{display_name} ({username})__**",
+            color=GREEN if status == "online" else RED
+        )
+        embed.set_thumbnail(url=avatar_url)
+        embed.add_field(name="Date", value=now, inline=True)
         if status == "online":
-            embed = discord.Embed(title=f"**__{display_name} ({username})__**", description="🟢Is right now online!", color=GREEN)
-            embed.add_field(name="Date", value=now, inline=True)
-            embed.set_thumbnail(url=avatar_url)
+            embed.description = "🟢 Is right now online!"
         else:
-            embed = discord.Embed(title=f"**__{display_name} ({username})__**", description="🔴Is right now offline!", color=RED)
-            embed.add_field(name="Date", value=now, inline=True)
+            embed.description = "🔴 Is right now offline!"
             embed.add_field(name="Played for", value="N/A", inline=True)
-            embed.set_thumbnail(url=avatar_url)
+
         await channel.send(embed=embed)
         data["agentblox_users"][username]["status"] = status
+
     save_data()
 
 @tasks.loop(seconds=30)
