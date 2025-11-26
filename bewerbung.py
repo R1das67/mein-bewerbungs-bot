@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 # CONFIG
 # -----------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
-ALLOWED_GUILD_ID = int(os.getenv("GUILD_ID"))  # nur für diesen Server
+ALLOWED_GUILD_ID = 1443299366629801986 int(os.getenv("GUILD_ID"))  # nur für diesen Server
 
 if not TOKEN or not ALLOWED_GUILD_ID:
     raise ValueError("❌ TOKEN oder GUILD_ID nicht gesetzt!")
@@ -382,3 +382,4 @@ async def on_ready():
 # RUN BOT
 # -----------------------------
 bot.run(TOKEN)
+
