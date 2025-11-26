@@ -82,7 +82,7 @@ class PanicModal(discord.ui.Modal, title="🚨 Panic Request"):
         role_ping = f"<@&{panic_role_id}>"
 
         embed = discord.Embed(
-            title=f"🚨 Panic Button gedrückt von {interaction.user}",
+            title=f"🚨 Panic Button pressed by {interaction.user}",
             color=discord.Color.red()
         )
         embed.add_field(name="Roblox Username", value=self.username.value, inline=False)
@@ -234,3 +234,4 @@ async def on_ready():
     print(f"Bot ist online als {bot.user}")
 
 bot.run(TOKEN)
+
