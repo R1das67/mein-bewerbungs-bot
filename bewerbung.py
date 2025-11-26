@@ -1,294 +1,131 @@
 import os
-import json
 import discord
-from discord.ext import commands
 from discord import app_commands
-from datetime import datetime, timezone
+from discord.ext import commands
 
-CONFIG_FILE = "guild_configs.json"
+TOKEN = os.getenv("DISCORD_TOKEN")
 
-# --- Intents & Bot Setup ---
 intents = discord.Intents.default()
-intents.members = True
 intents.message_content = True
+intents.members = True
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# --- Konfiguration laden/speichern ---
-if os.path.exists(CONFIG_FILE):
-    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
-        guild_configs = json.load(f)
-else:
-    guild_configs = {}
-
-def save_configs():
-    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-        json.dump(guild_configs, f, indent=4, ensure_ascii=False)
+# Speicher für Kanal & Rolle
+panic_channel_id = None
+member_role_id = None
 
 
-# --- Modal für Bewerber ---
-class BewerbungModal(discord.ui.Modal):
-    def __init__(self, guild_id: int):
-        config = guild_configs.get(str(guild_id), {})
-        title = config.get("title", "Bewerbungsformular")
-        super().__init__(title=title)
+# -------------------------------------------------------
+# Persistent Panic Button View
+# -------------------------------------------------------
+class PanicButton(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)  # Persistente View
 
-        self.answers = []
-        for q in config.get("questions", []):
-            input_style = discord.TextStyle.short if q["style"] == "short" else discord.TextStyle.paragraph
-            input_field = discord.ui.TextInput(label=q["label"], style=input_style, max_length=400)
-            self.add_item(input_field)
-            self.answers.append(input_field)
+    @discord.ui.button(label="🚨 Panic", style=discord.ButtonStyle.danger, custom_id="panic_button_main")
+    async def panic_btn(self, button: discord.ui.Button, btn_interaction: discord.Interaction):
 
-    async def on_submit(self, interaction: discord.Interaction):
-        config = guild_configs.get(str(interaction.guild.id))
-        if not config or "bewerbung_channel" not in config:
-            await interaction.response.send_message(
-                "❌ Kein Bewerbungskanal wurde von einem Admin gesetzt.", ephemeral=True
+        # Step 1 – Roblox Username
+        await btn_interaction.response.send_message("Your Roblox-Username:", ephemeral=True)
+
+        def check_user(m):
+            return m.author.id == btn_interaction.user.id and m.channel == btn_interaction.channel
+
+        username_msg = await bot.wait_for("message", check=check_user)
+        username = username_msg.content
+
+        # Step 2 – Location
+        await btn_interaction.followup.send("Where are you on the map?", ephemeral=True)
+
+        location_msg = await bot.wait_for("message", check=check_user)
+        location = location_msg.content
+
+        # Check required settings
+        if panic_channel_id is None or member_role_id is None:
+            await btn_interaction.followup.send(
+                "❌ Panic-Server oder Member-Rolle nicht gesetzt! Bitte zuerst **/create-panic-server** und **/choose-member-role** nutzen.",
+                ephemeral=True
             )
             return
 
-        kanal = bot.get_channel(config["bewerbung_channel"])
-        embed = discord.Embed(
-            title=config.get("title", "Bewerbung"),
-            description=f"Von: {interaction.user.mention}",
-            color=discord.Color.blue(),
+        channel = bot.get_channel(panic_channel_id)
+        role_ping = f"<@&{member_role_id}>"
+
+        # Normal message
+        await channel.send(f"**__🚨{role_ping} panic!__🚨**")
+
+        # Embed message
+        embed2 = discord.Embed(
+            title=f"{btn_interaction.user.name} pressed the panic button 🚨",
+            color=discord.Color.red()
         )
+        embed2.add_field(name="Roblox Username", value=username, inline=False)
+        embed2.add_field(name="Location", value=location, inline=False)
+        embed2.set_footer(text=f"User ID: {btn_interaction.user.id}")
 
-        for idx, answer in enumerate(self.answers, start=1):
-            embed.add_field(name=f"Frage {idx}", value=answer.value, inline=False)
+        await channel.send(embed=embed2)
 
-        embed.set_footer(text=f"LG {interaction.user.display_name}")
-        view = BewerbungsBearbeitenView(interaction.user.id)
-        await kanal.send(embed=embed, view=view)
-        await interaction.response.send_message("✅ Deine Bewerbung wurde eingereicht!", ephemeral=True)
-
-
-# --- Persistent View für Bewerter ---
-class BewerbungsBearbeitenView(discord.ui.View):
-    def __init__(self, bewerber_id: int | None = None):
-        super().__init__(timeout=None)
-        self.bewerber_id = bewerber_id
-        self.result_text = None
-
-    def update_buttons(self):
-        for child in self.children:
-            if isinstance(child, discord.ui.Button):
-                if self.result_text:  # Wenn schon entschieden wurde
-                    child.disabled = True
-
-    @discord.ui.button(label="✅ Ja", style=discord.ButtonStyle.green, custom_id="bewerbung_ja")
-    async def ja_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        config = guild_configs.get(str(interaction.guild.id), {})
-        member = interaction.guild.get_member(self.bewerber_id)
-        if member:
-            roles_to_add = []
-            if config.get("give_role"):
-                roles_to_add.append(interaction.guild.get_role(config["give_role"]))
-            for rid in config.get("add_roles", []):
-                roles_to_add.append(interaction.guild.get_role(rid))
-            roles_to_add = [r for r in roles_to_add if r]
-
-            try:
-                if roles_to_add:
-                    await member.add_roles(*roles_to_add)
-                if config.get("remove_role"):
-                    role_remove = interaction.guild.get_role(config["remove_role"])
-                    if role_remove:
-                        await member.remove_roles(role_remove)
-            except discord.Forbidden:
-                pass
-
-            if config.get("info_channel"):
-                channel = bot.get_channel(config["info_channel"])
-                accepted_embed = discord.Embed(
-                    title="🎉 Bewerbung angenommen",
-                    description=f"{member.mention} wurde erfolgreich aufgenommen!",
-                    color=discord.Color.green(),
-                )
-                accepted_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
-                accepted_embed.timestamp = datetime.now(timezone.utc)
-                await channel.send(embed=accepted_embed)
-
-        self.result_text = "✅ Bewerbung wurde angenommen"
-        self.update_buttons()
-        try:
-            await interaction.message.edit(view=self, content=self.result_text)
-        except discord.NotFound:
-            pass
-        await interaction.response.send_message("Bewerbung angenommen.", ephemeral=True)
-
-    @discord.ui.button(label="❌ Nein", style=discord.ButtonStyle.red, custom_id="bewerbung_nein")
-    async def nein_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        config = guild_configs.get(str(interaction.guild.id), {})
-        member = interaction.guild.get_member(self.bewerber_id)
-        if member and config.get("info_channel"):
-            channel = bot.get_channel(config["info_channel"])
-            rejected_embed = discord.Embed(
-                title="❌ Bewerbung abgelehnt",
-                description=f"Die Bewerbung von {member.mention} wurde leider abgelehnt.",
-                color=discord.Color.red(),
-            )
-            rejected_embed.add_field(name="Von wem entschieden", value=interaction.user.mention)
-            rejected_embed.timestamp = datetime.now(timezone.utc)
-            await channel.send(embed=rejected_embed)
-
-        self.result_text = "❌ Bewerbung wurde abgelehnt"
-        self.update_buttons()
-        try:
-            await interaction.message.edit(view=self, content=self.result_text)
-        except discord.NotFound:
-            pass
-        await interaction.response.send_message("Bewerbung abgelehnt.", ephemeral=True)
-
-    @discord.ui.button(label="ℹ Info", style=discord.ButtonStyle.blurple, custom_id="bewerbung_info")
-    async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(InfoModal(self.bewerber_id))
+        await btn_interaction.followup.send("🚨 Panic wurde erfolgreich gesendet!", ephemeral=True)
 
 
-# --- Modal für Info ---
-class InfoModal(discord.ui.Modal):
-    def __init__(self, bewerber_id: int):
-        super().__init__(title="Zusatzinfo")
-        self.bewerber_id = bewerber_id
-        self.info = discord.ui.TextInput(label="Kommentar", style=discord.TextStyle.paragraph, max_length=400)
-        self.add_item(self.info)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        config = guild_configs.get(str(interaction.guild.id), {})
-        member = interaction.guild.get_member(self.bewerber_id)
-        if member and config.get("info_channel"):
-            channel = bot.get_channel(config["info_channel"])
-            info_embed = discord.Embed(
-                title="ℹ Info zur Bewerbung",
-                description=f"{member.mention}, es gibt eine neue Info zu deiner Bewerbung:",
-                color=discord.Color.blue(),
-            )
-            info_embed.add_field(name="Kommentar", value=self.info.value, inline=False)
-            info_embed.add_field(name="Von wem", value=interaction.user.mention, inline=False)
-            info_embed.timestamp = datetime.now(timezone.utc)
-            await channel.send(embed=info_embed)
-        await interaction.response.send_message("Info gesendet.", ephemeral=True)
-
-
-# --- Start-Button View ---
-class StartBewerbungView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="📝 Bewerbung starten", style=discord.ButtonStyle.primary, custom_id="start_bewerbung")
-    async def start_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(BewerbungModal(interaction.guild.id))
-
-
-# --- Commands für Admins ---
-@bot.tree.command(name="bewerbung-starten", description="Sendet die Bewerbungsnachricht mit Button in diesen Kanal")
-@app_commands.checks.has_permissions(administrator=True)
-async def bewerbung_starten(interaction: discord.Interaction):
-    view = StartBewerbungView()
-    await interaction.channel.send(
-        "Klicke unten auf den Button, um deine Bewerbung zu starten:", view=view
-    )
-    await interaction.response.send_message("✅ Bewerbungsnachricht wurde gesendet.", ephemeral=True)
-
-@bot.tree.command(name="set-bewerbungsvorlagen", description="Setzt den Kanal für Bewerbungen (per ID)")
-@app_commands.checks.has_permissions(administrator=True)
-async def set_bewerbungsvorlagen(interaction: discord.Interaction, kanal_id: str):
-    kanal = bot.get_channel(int(kanal_id))
-    if not kanal or not isinstance(kanal, discord.TextChannel):
-        await interaction.response.send_message("❌ Ungültige Kanal-ID.", ephemeral=True)
-        return
-    guild_configs.setdefault(str(interaction.guild.id), {})
-    guild_configs[str(interaction.guild.id)]["bewerbung_channel"] = kanal.id
-    save_configs()
-    await interaction.response.send_message(f"✅ Bewerbungskanal gesetzt auf {kanal.mention}", ephemeral=True)
-
-@bot.tree.command(name="set-info-kanal", description="Setzt den Info-Kanal für Bewerbungen (per ID)")
-@app_commands.checks.has_permissions(administrator=True)
-async def set_info_kanal(interaction: discord.Interaction, kanal_id: str):
-    kanal = bot.get_channel(int(kanal_id))
-    if not kanal or not isinstance(kanal, discord.TextChannel):
-        await interaction.response.send_message("❌ Ungültige Kanal-ID.", ephemeral=True)
-        return
-    guild_configs.setdefault(str(interaction.guild.id), {})
-    guild_configs[str(interaction.guild.id)]["info_channel"] = kanal.id
-    save_configs()
-    await interaction.response.send_message(f"✅ Info-Kanal gesetzt auf {kanal.mention}", ephemeral=True)
-
-@bot.tree.command(name="give-role", description="Setzt die Hauptrolle, die Bewerber nach Annahme erhalten (per ID)")
-@app_commands.checks.has_permissions(administrator=True)
-async def give_role(interaction: discord.Interaction, role_id: str):
-    role = interaction.guild.get_role(int(role_id))
-    if not role:
-        await interaction.response.send_message("❌ Ungültige Rollen-ID.", ephemeral=True)
-        return
-    guild_configs.setdefault(str(interaction.guild.id), {})
-    guild_configs[str(interaction.guild.id)]["give_role"] = role.id
-    save_configs()
-    await interaction.response.send_message(f"✅ Hauptrolle {role.mention} wird vergeben.", ephemeral=True)
-
-@bot.tree.command(name="add-role", description="Fügt eine zusätzliche Rolle hinzu, die Bewerber nach Annahme erhalten (per ID)")
-@app_commands.checks.has_permissions(administrator=True)
-async def add_role(interaction: discord.Interaction, role_id: str):
-    role = interaction.guild.get_role(int(role_id))
-    if not role:
-        await interaction.response.send_message("❌ Ungültige Rollen-ID.", ephemeral=True)
-        return
-    guild_configs.setdefault(str(interaction.guild.id), {})
-    guild_configs[str(interaction.guild.id)].setdefault("add_roles", [])
-    if role.id not in guild_configs[str(interaction.guild.id)]["add_roles"]:
-        guild_configs[str(interaction.guild.id)]["add_roles"].append(role.id)
-    save_configs()
-    await interaction.response.send_message(f"✅ Zusatzrolle {role.mention} wird vergeben.", ephemeral=True)
-
-@bot.tree.command(name="remove-role", description="Setzt die Rolle, die Bewerber nach Annahme entfernt wird (per ID)")
-@app_commands.checks.has_permissions(administrator=True)
-async def remove_role(interaction: discord.Interaction, role_id: str):
-    role = interaction.guild.get_role(int(role_id))
-    if not role:
-        await interaction.response.send_message("❌ Ungültige Rollen-ID.", ephemeral=True)
-        return
-    guild_configs.setdefault(str(interaction.guild.id), {})
-    guild_configs[str(interaction.guild.id)]["remove_role"] = role.id
-    save_configs()
-    await interaction.response.send_message(f"✅ Rolle {role.mention} wird entfernt.", ephemeral=True)
-
-# --- Neue Commands für Bewerbungsformular ---
-@bot.tree.command(name="set-bewerbungs-titel", description="Setzt den Titel des Bewerbungsformulars")
-@app_commands.checks.has_permissions(administrator=True)
-async def set_bewerbungs_titel(interaction: discord.Interaction, titel: str):
-    guild_configs.setdefault(str(interaction.guild.id), {})
-    guild_configs[str(interaction.guild.id)]["title"] = titel
-    save_configs()
-    await interaction.response.send_message(f"✅ Bewerbungs-Titel gesetzt auf: **{titel}**", ephemeral=True)
-
-@bot.tree.command(name="add-bewerbungs-frage", description="Fügt eine Frage ins Bewerbungsformular ein")
-@app_commands.checks.has_permissions(administrator=True)
-async def add_bewerbungs_frage(interaction: discord.Interaction, frage: str, style: str = "short"):
-    guild_configs.setdefault(str(interaction.guild.id), {})
-    guild_configs[str(interaction.guild.id)].setdefault("questions", [])
-    if style not in ("short", "paragraph"):
-        await interaction.response.send_message("❌ Style muss `short` oder `paragraph` sein.", ephemeral=True)
-        return
-    guild_configs[str(interaction.guild.id)]["questions"].append({"label": frage, "style": style})
-    save_configs()
-    await interaction.response.send_message(f"✅ Frage hinzugefügt: **{frage}** ({style})", ephemeral=True)
-
-@bot.tree.command(name="clear-bewerbungsfragen", description="Löscht alle Bewerbungsfragen")
-@app_commands.checks.has_permissions(administrator=True)
-async def clear_bewerbungsfragen(interaction: discord.Interaction):
-    guild_configs.setdefault(str(interaction.guild.id), {})
-    guild_configs[str(interaction.guild.id)]["questions"] = []
-    save_configs()
-    await interaction.response.send_message("✅ Alle Bewerbungsfragen wurden gelöscht.", ephemeral=True)
-
-
-# --- Bot Events ---
+# -------------------------------------------------------
+# Bot Ready → persistent views laden
+# -------------------------------------------------------
 @bot.event
 async def on_ready():
-    bot.add_view(StartBewerbungView())              # Start-Button persistent
-    bot.add_view(BewerbungsBearbeitenView())        # Bearbeitungs-Buttons persistent
-    await bot.tree.sync()
-    print(f"✅ Eingeloggt als {bot.user}")
+    print(f"Bot eingeloggt als {bot.user}")
+    bot.add_view(PanicButton())  # <- WICHTIG: Persistente Views registrieren
+    try:
+        await bot.tree.sync()
+        print("Slash Commands synchronisiert.")
+    except Exception as e:
+        print(e)
 
-if __name__ == "__main__":
-    bot.run(os.getenv("DISCORD_TOKEN"))
+
+# -------------------------------------------------------
+# Slash Command: Set Panic Server
+# -------------------------------------------------------
+@bot.tree.command(name="create-panic-server", description="Setzt den Kanal, in dem Panics gesendet werden.")
+async def set_panic_server(interaction: discord.Interaction, channel_id: str):
+    global panic_channel_id
+    panic_channel_id = int(channel_id)
+
+    await interaction.response.send_message(
+        f"✅ Panic-Server Kanal gesetzt auf <#{channel_id}>", ephemeral=True
+    )
+
+
+# -------------------------------------------------------
+# Slash Command: Set Member Role
+# -------------------------------------------------------
+@bot.tree.command(name="choose-member-role", description="Legt die Member Rolle fest, die gepingt werden soll.")
+async def choose_member_role(interaction: discord.Interaction, role_id: str):
+    global member_role_id
+    member_role_id = int(role_id)
+
+    await interaction.response.send_message(
+        f"✅ Member-Rolle gesetzt auf <@&{role_id}>", ephemeral=True
+    )
+
+
+# -------------------------------------------------------
+# Slash Command: Create Panic Button
+# -------------------------------------------------------
+@bot.tree.command(name="create-panic-button", description="Erstellt einen Panic Button.")
+async def create_panic_button(interaction: discord.Interaction):
+
+    embed = discord.Embed(
+        title="🚨 Panic Button",
+        description="If you need help from an emergency call server in Hamburg, press the button.",
+        color=discord.Color.red()
+    )
+
+    # Sende persistenten Button
+    await interaction.response.send_message(embed=embed, view=PanicButton())
+
+
+# -------------------------------------------------------
+# Start bot
+# -------------------------------------------------------
+bot.run(TOKEN)
