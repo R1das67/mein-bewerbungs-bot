@@ -1,9 +1,8 @@
 import os
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord import app_commands
 import json
-import asyncio
 from datetime import datetime, timedelta
 
 # -----------------------------
@@ -11,7 +10,7 @@ from datetime import datetime, timedelta
 # -----------------------------
 TOKEN = os.getenv("DISCORD_TOKEN")
 if not TOKEN:
-    raise ValueError("❌ TOKEN ist nicht gesetzt! Bitte als Umgebungsvariable hinzufügen.")
+    raise ValueError("❌ DISCORD_TOKEN ist nicht gesetzt!")
 
 DATA_FILE = "bot_data.json"
 
@@ -46,22 +45,26 @@ def save_data():
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
-
 # -----------------------------
 # MODAL FÜR PANIC BUTTON
 # -----------------------------
 class PanicModal(discord.ui.Modal, title="🚨 Panic Request"):
     username = discord.ui.TextInput(
-        label="Your Roblox Username",
+        label="Roblox Username",
         placeholder="Enter your username",
         required=True,
         max_length=50
     )
-
     location = discord.ui.TextInput(
-        label="Where are you?",
+        label="Location",
         placeholder="Describe your location",
         required=True,
+        max_length=100
+    )
+    information = discord.ui.TextInput(
+        label="Additional Info",
+        placeholder="Extra information",
+        required=False,
         max_length=100
     )
 
@@ -78,16 +81,21 @@ class PanicModal(discord.ui.Modal, title="🚨 Panic Request"):
         channel = interaction.client.get_channel(panic_channel_id)
         role_ping = f"<@&{panic_role_id}>"
 
+        # Normale Nachricht
         await channel.send(f"**__🚨{role_ping} panic!__🚨**")
+
+        # Embed
         embed = discord.Embed(
             title=f"{interaction.user} pressed the panic button 🚨",
             color=discord.Color.red()
         )
         embed.add_field(name="Roblox Username", value=self.username.value, inline=False)
         embed.add_field(name="Location", value=self.location.value, inline=False)
+        if self.information.value:
+            embed.add_field(name="Additional Info", value=self.information.value, inline=False)
         await channel.send(embed=embed)
-        await interaction.response.send_message("✅ Panic alert sent!", ephemeral=True)
 
+        await interaction.response.send_message("✅ Panic alert sent!", ephemeral=True)
 
 # -----------------------------
 # PERSISTENTER PANIC BUTTON
@@ -101,17 +109,14 @@ class PanicButtonView(discord.ui.View):
         modal = PanicModal()
         await interaction.response.send_modal(modal)
 
-
 # -----------------------------
-# HELPER: Admin check
+# HELPER
 # -----------------------------
 def is_admin(interaction: discord.Interaction):
     return interaction.user.guild_permissions.administrator
 
-
 def is_owner(interaction: discord.Interaction):
     return interaction.user.id == interaction.guild.owner_id
-
 
 # -----------------------------
 # SLASH COMMANDS
@@ -123,21 +128,19 @@ async def create_panic_button(interaction: discord.Interaction):
         return
 
     await interaction.response.defer(ephemeral=True)
-
     embed = discord.Embed(
         title="🚨 Panic Button",
         description="If you need help from an emergency call server in Hamburg, press the button.",
         color=discord.Color.red()
     )
     view = PanicButtonView()
-
     await interaction.channel.send(embed=embed, view=view)
     await interaction.followup.send("✅ Panic button created!", ephemeral=True)
 
 
 @bot.tree.command(name="set-panic-channel", description="Set the channel for panic alerts")
 @app_commands.describe(channel="Channel where panic alerts will be sent")
-async def set_panic_server(interaction: discord.Interaction, channel: discord.TextChannel):
+async def set_panic_channel(interaction: discord.Interaction, channel: discord.TextChannel):
     if not is_admin(interaction):
         await interaction.response.send_message("❌ Nur Admins dürfen diesen Command nutzen.", ephemeral=True)
         return
@@ -158,37 +161,34 @@ async def set_panic_role(interaction: discord.Interaction, role: discord.Role):
     save_data()
     await interaction.response.send_message(f"Panic role set to {role.mention}.", ephemeral=True)
 
-
 # -----------------------------
 # WHITELIST COMMANDS
 # -----------------------------
 @bot.tree.command(name="add-whitelist", description="Fügt einen User zur Webhook-Whitelist hinzu")
-@app_commands.describe(user="User ID")
+@app_commands.describe(user="User")
 async def add_whitelist(interaction: discord.Interaction, user: discord.User):
     if not is_owner(interaction):
         await interaction.response.send_message("❌ Nur der Server-Eigentümer darf diesen Command nutzen.", ephemeral=True)
         return
-
     if user.id not in data["whitelist"]:
         data["whitelist"].append(user.id)
         save_data()
-    await interaction.response.send_message(f"{user} wurde zur Whitelist hinzugefügt.", ephemeral=True)
+    await interaction.response.send_message(f"{user.display_name} wurde zur Whitelist hinzugefügt.", ephemeral=True)
 
 
 @bot.tree.command(name="remove-whitelist", description="Entfernt einen User von der Webhook-Whitelist")
-@app_commands.describe(user="User ID")
+@app_commands.describe(user="User")
 async def remove_whitelist(interaction: discord.Interaction, user: discord.User):
     if not is_owner(interaction):
         await interaction.response.send_message("❌ Nur der Server-Eigentümer darf diesen Command nutzen.", ephemeral=True)
         return
-
     if user.id in data["whitelist"]:
         data["whitelist"].remove(user.id)
         save_data()
-    await interaction.response.send_message(f"{user} wurde von der Whitelist entfernt.", ephemeral=True)
+    await interaction.response.send_message(f"{user.display_name} wurde von der Whitelist entfernt.", ephemeral=True)
 
 
-@bot.tree.command(name="show-whitelist", description="Zeigt die Whitelist an")
+@bot.tree.command(name="show-whitelist", description="Zeigt die Webhook-Whitelist")
 async def show_whitelist(interaction: discord.Interaction):
     if not data["whitelist"]:
         await interaction.response.send_message("Whitelist ist leer.", ephemeral=False)
@@ -203,7 +203,6 @@ async def show_whitelist(interaction: discord.Interaction):
             names.append(str(uid))
     await interaction.response.send_message("Whitelist:\n" + "\n".join(names), ephemeral=False)
 
-
 # -----------------------------
 # ANTI-WEBHOOK SYSTEM
 # -----------------------------
@@ -213,7 +212,6 @@ async def on_webhooks_update(channel):
     current_hooks = await channel.webhooks()
     now = datetime.utcnow()
 
-    # Alte Hooks merken
     if not hasattr(bot, "existing_hooks"):
         bot.existing_hooks = {}
     old_hooks = bot.existing_hooks.get(channel.id, [])
@@ -221,15 +219,12 @@ async def on_webhooks_update(channel):
 
     for hook in current_hooks:
         if hook.id in old_hooks:
-            continue  # schon vorher vorhanden
-
-        # Nicht whitelisted
+            continue
         creator = None
         try:
             creator = await guild.fetch_member(hook.user.id)
         except:
-            continue  # keine info
-
+            continue
         if creator.id not in data["whitelist"]:
             await hook.delete()
             user_id = creator.id
@@ -238,9 +233,7 @@ async def on_webhooks_update(channel):
             timestamps.append(now.isoformat())
             data["webhook_attempts"][str(user_id)] = timestamps
             save_data()
-
             if len(timestamps) >= 2:
-                # Kick user
                 try:
                     await creator.kick(reason="Zu viele nicht-whitelisted Webhook-Erstellungen")
                     del data["webhook_attempts"][str(user_id)]
@@ -248,22 +241,18 @@ async def on_webhooks_update(channel):
                 except:
                     pass
 
-
 # -----------------------------
 # BOT READY
 # -----------------------------
 @bot.event
 async def on_ready():
     bot.add_view(PanicButtonView())
-    # Alte Hooks merken
     bot.existing_hooks = {}
-    for g in bot.guilds:
-        for ch in g.text_channels:
+    for ch in bot.get_all_channels():
+        if isinstance(ch, discord.TextChannel):
             hooks = await ch.webhooks()
             bot.existing_hooks[ch.id] = [h.id for h in hooks]
     await bot.tree.sync()
     print(f"Bot logged in as {bot.user}")
 
-
 bot.run(TOKEN)
-
