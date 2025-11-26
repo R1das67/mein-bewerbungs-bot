@@ -1,9 +1,9 @@
 import os
 import discord
-from discord import app_commands
 from discord.ext import commands
+from discord import app_commands
 
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN = os.getenv("TOKEN")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -11,134 +11,125 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-panic_channel_id = None
-member_role_id = None
+# Speicher für Panic-Channel & Role
+PANIC_CHANNEL = None
+PANIC_ROLE = None
 
 
-# -------------------------------------------------------
-# Modal für Panic Input
-# -------------------------------------------------------
-class PanicModal(discord.ui.Modal, title="🚨 Panic Details"):
-    
+# -----------------------------------------
+#         MODAL FÜR PANIC BUTTON
+# -----------------------------------------
+class PanicModal(discord.ui.Modal, title="🚨 Panic Request"):
     username = discord.ui.TextInput(
-        label="Roblox Username",
-        placeholder="Dein Roblox Name...",
+        label="Your Roblox Username",
+        placeholder="Enter your username",
         required=True,
-        max_length=40
+        max_length=50
     )
 
     location = discord.ui.TextInput(
-        label="Your Location",
-        placeholder="Wo bist du auf der Map?",
-        style=discord.TextStyle.long,
+        label="Where are you?",
+        placeholder="Describe your location",
         required=True,
-        max_length=200
+        max_length=100
     )
 
-    def __init__(self, user, bot):
-        super().__init__()
-        self.user = user
-        self.bot = bot
-
     async def on_submit(self, interaction: discord.Interaction):
-        global panic_channel_id, member_role_id
 
-        if panic_channel_id is None or member_role_id is None:
+        global PANIC_CHANNEL, PANIC_ROLE
+
+        if PANIC_CHANNEL is None or PANIC_ROLE is None:
             await interaction.response.send_message(
-                "❌ Panic-Server oder Member-Rolle fehlen! Nutze /create-panic-server & /choose-member-role",
+                "❌ Panic-Server oder Member-Rolle nicht gesetzt! Nutze /set-panic-server & /set-panic-role",
                 ephemeral=True
             )
             return
 
-        channel = self.bot.get_channel(panic_channel_id)
-        role_ping = f"<@&{member_role_id}>"
+        channel = interaction.client.get_channel(PANIC_CHANNEL)
+        role_ping = f"<@&{PANIC_ROLE}>"
 
-        # Normale Warnung
+        # Normale Nachricht
         await channel.send(f"**__🚨{role_ping} panic!__🚨**")
 
         # Embed
         embed = discord.Embed(
-            title=f"{self.user.name} pressed the panic button 🚨",
+            title=f"{interaction.user} pressed the panic button 🚨",
             color=discord.Color.red()
         )
         embed.add_field(name="Roblox Username", value=self.username.value, inline=False)
         embed.add_field(name="Location", value=self.location.value, inline=False)
-        embed.set_footer(text=f"User ID: {self.user.id}")
-
         await channel.send(embed=embed)
 
-        # Unsichtbare Antwort (wird NICHT angezeigt)
-        await interaction.response.defer()
+        # Ephemeral Bestätigung an User
+        await interaction.response.send_message("✅ Panic alert sent!", ephemeral=True)
 
 
-# -------------------------------------------------------
-# Persistent Panic Button View
-# -------------------------------------------------------
-class PanicButton(discord.ui.View):
+# -----------------------------------------
+#        PERSISTENTER PANIC BUTTON
+# -----------------------------------------
+class PanicButtonView(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None)
+        super().__init__(timeout=None)  
 
-    @discord.ui.button(
-        label="🚨 Panic",
-        style=discord.ButtonStyle.danger,
-        custom_id="panic_button_main"
-    )
+    @discord.ui.button(label="🚨 Panic", style=discord.ButtonStyle.danger, custom_id="panic_button")
     async def panic_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = PanicModal(interaction.user, bot)
+        modal = PanicModal()
         await interaction.response.send_modal(modal)
 
 
-# -------------------------------------------------------
-# Bot Ready → persistent views
-# -------------------------------------------------------
-@bot.event
-async def on_ready():
-    print(f"Bot eingeloggt als {bot.user}")
-    bot.add_view(PanicButton())  # Wichtig für persistente Buttons
-    await bot.tree.sync()
-
-
-# -------------------------------------------------------
-# Commands
-# -------------------------------------------------------
-@bot.tree.command(name="create-panic-server", description="Setze den Kanal für Panics.")
-async def set_panic_server(interaction: discord.Interaction, channel_id: str):
-    global panic_channel_id
-    panic_channel_id = int(channel_id)
-    await interaction.response.send_message(
-        f"✅ Panic-Server gesetzt auf <#{channel_id}>", ephemeral=True
-    )
-
-
-@bot.tree.command(name="choose-member-role", description="Setze die Rolle, die gepingt werden soll.")
-async def choose_member_role(interaction: discord.Interaction, role_id: str):
-    global member_role_id
-    member_role_id = int(role_id)
-    await interaction.response.send_message(
-        f"✅ Member-Rolle gesetzt auf <@&{role_id}>", ephemeral=True
-    )
-
-
-# -------------------------------------------------------
-# COMMAND: Create Panic Button → ohne sichtbare Antwort!
-# -------------------------------------------------------
+# -----------------------------------------
+#        SLASH: CREATE PANIC BUTTON
+# -----------------------------------------
 @bot.tree.command(name="create-panic-button", description="Erstellt einen Panic Button.")
 async def create_panic_button(interaction: discord.Interaction):
 
-    # Unsichtbare Antwort (Discord zeigt NICHTS an!)
-    await interaction.response.defer(ephemeral=False)
+    # ⚡ Verhindert, dass Discord die Slash-Command-Blase zeigt
+    await interaction.response.defer(ephemeral=True)
 
     embed = discord.Embed(
         title="🚨 Panic Button",
         description="If you need help from an emergency call server in Hamburg, press the button.",
         color=discord.Color.red()
     )
+    view = PanicButtonView()
 
-    # Nachricht editieren = kein Bot-Symbol sichtbar
-    await interaction.followup.send(embed=embed, view=PanicButton())
+    # Button + Embed als eigene Nachricht posten
+    await interaction.channel.send(embed=embed, view=view)
+
+    # Optionale kurze Bestätigung (privat)
+    await interaction.followup.send("✅ Panic button created!", ephemeral=True)
 
 
-# -------------------------------------------------------
-# Run bot
-# -------------------------------------------------------
+# -----------------------------------------
+#        SLASH: PANIC CHANNEL SETZEN
+# -----------------------------------------
+@bot.tree.command(name="set-panic-server", description="Set the channel for panic alerts")
+@app_commands.describe(channel="Channel where panic alerts will be sent")
+async def set_panic_server(interaction: discord.Interaction, channel: discord.TextChannel):
+    global PANIC_CHANNEL
+    PANIC_CHANNEL = channel.id
+    await interaction.response.send_message(f"Panic alert channel set to {channel.mention}.", ephemeral=True)
+
+
+# -----------------------------------------
+#        SLASH: PANIC ROLE SETZEN
+# -----------------------------------------
+@bot.tree.command(name="set-panic-role", description="Set the role to ping on panic")
+@app_commands.describe(role="Role that will be pinged when someone presses the panic button")
+async def set_panic_role(interaction: discord.Interaction, role: discord.Role):
+    global PANIC_ROLE
+    PANIC_ROLE = role.id
+    await interaction.response.send_message(f"Panic role set to {role.mention}.", ephemeral=True)
+
+
+# -----------------------------------------
+#       PERSISTENTE BUTTONS AKTIVIEREN
+# -----------------------------------------
+@bot.event
+async def on_ready():
+    bot.add_view(PanicButtonView())  # Wichtig für persistente Buttons
+    await bot.tree.sync()
+    print(f"Bot logged in as {bot.user}")
+
+
 bot.run(TOKEN)
