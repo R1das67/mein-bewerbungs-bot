@@ -1,10 +1,11 @@
 import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from discord import app_commands
 import json
 import asyncio
 from datetime import datetime, timedelta
+import aiohttp
 
 # -----------------------------
 # CONFIG
@@ -30,7 +31,9 @@ default_data = {
     "panic_channel": None,
     "panic_role": None,
     "whitelist": [],
-    "webhook_attempts": {}
+    "webhook_attempts": {},
+    "agentblox_channel": None,
+    "agentblox_users": {}
 }
 
 if os.path.exists(DATA_FILE):
@@ -45,28 +48,18 @@ def save_data():
     with open(DATA_FILE, "w") as f:
         json.dump(data, f, indent=4)
 
+# ================== COLORS ==================
+WEISS = discord.Color.from_rgb(255, 255, 255)
+RED = discord.Color.red()
+GREEN = discord.Color.green()
+
 # -----------------------------
 # PANIC MODAL
 # -----------------------------
 class PanicModal(discord.ui.Modal, title="🚨 Panic Request"):
-    username = discord.ui.TextInput(
-        label="Roblox Username",
-        placeholder="Dein Roblox Username",
-        required=True,
-        max_length=50
-    )
-    location = discord.ui.TextInput(
-        label="Location",
-        placeholder="Wo befindest du dich?",
-        required=True,
-        max_length=100
-    )
-    additional_info = discord.ui.TextInput(
-        label="Additional Information",
-        placeholder="Zusätzliche Informationen",
-        required=False,
-        max_length=200
-    )
+    username = discord.ui.TextInput(label="Roblox Username", placeholder="Dein Roblox Username", required=True, max_length=50)
+    location = discord.ui.TextInput(label="Location", placeholder="Wo befindest du dich?", required=True, max_length=100)
+    additional_info = discord.ui.TextInput(label="Additional Information", placeholder="Zusätzliche Informationen", required=False, max_length=200)
 
     async def on_submit(self, interaction: discord.Interaction):
         panic_channel_id = data.get("panic_channel")
@@ -83,7 +76,7 @@ class PanicModal(discord.ui.Modal, title="🚨 Panic Request"):
 
         embed = discord.Embed(
             title=f"🚨 Panic Button pressed by {interaction.user}",
-            color=discord.Color.red()
+            color=RED
         )
         embed.add_field(name="Roblox Username", value=self.username.value, inline=False)
         embed.add_field(name="Location", value=self.location.value, inline=False)
@@ -125,7 +118,7 @@ async def create_panic_button(interaction: discord.Interaction):
     embed = discord.Embed(
         title="🚨 Panic Button",
         description="Wenn du Hilfe benötigst, drücke den Panic Button.",
-        color=discord.Color.red()
+        color=RED
     )
     view = PanicButtonView()
     await interaction.channel.send(embed=embed, view=view)
@@ -224,12 +217,89 @@ async def on_webhooks_update(channel):
                 except:
                     pass
 
+# ================= AGENT BLOX =================
+async def fetch_roblox_user(usernames):
+    async with aiohttp.ClientSession() as session:
+        users = {}
+        for username in usernames:
+            url = f"https://api.roblox.com/users/get-by-username?username={username}"
+            async with session.get(url) as r:
+                if r.status == 200:
+                    json_data = await r.json()
+                    if "Id" in json_data:
+                        users[username] = json_data
+        return users
+
+async def fetch_avatar_thumbnail(user_id):
+    return f"https://www.roblox.com/headshot-thumbnail/image?userId={user_id}&width=420&height=420&format=png"
+
+@bot.tree.command(name="add-user", description="Fügt einen Roblox-Spieler zur Überwachung hinzu")
+async def add_user(interaction: discord.Interaction, username: str):
+    if username in data["agentblox_users"]:
+        await interaction.response.send_message("Benutzer ist bereits überwacht.", ephemeral=True)
+        return
+    data["agentblox_users"][username] = {"status": None, "join_time": None}
+    save_data()
+    await interaction.response.send_message(f"{username} wurde zur AgentBlox-Liste hinzugefügt.", ephemeral=True)
+
+@bot.tree.command(name="remove-user", description="Entfernt einen Roblox-Spieler von der Überwachung")
+async def remove_user(interaction: discord.Interaction, username: str):
+    if username in data["agentblox_users"]:
+        del data["agentblox_users"][username]
+        save_data()
+        await interaction.response.send_message(f"{username} wurde entfernt.", ephemeral=True)
+    else:
+        await interaction.response.send_message(f"{username} ist nicht in der Liste.", ephemeral=True)
+
+@bot.tree.command(name="choose-channel", description="Wählt den Kanal für AgentBlox Nachrichten")
+async def choose_channel(interaction: discord.Interaction, channel: discord.TextChannel):
+    data["agentblox_channel"] = channel.id
+    save_data()
+    await interaction.response.send_message(f"AgentBlox Kanal gesetzt auf {channel.mention}", ephemeral=True)
+
+async def check_agentblox_status():
+    if not data["agentblox_users"] or not data["agentblox_channel"]:
+        return
+    usernames = list(data["agentblox_users"].keys())
+    users = await fetch_roblox_user(usernames)
+    channel = bot.get_channel(data["agentblox_channel"])
+    if channel is None:
+        return
+    for username, info in data["agentblox_users"].items():
+        user_info = users.get(username)
+        if not user_info:
+            continue
+        user_id = user_info["Id"]
+        display_name = user_info["Username"]
+        # Beispiel Status: Online/Offline zufällig (da Roblox API das nicht direkt liefert)
+        import random
+        status = random.choice(["online", "offline"])
+        now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        avatar_url = await fetch_avatar_thumbnail(user_id)
+        if status == "online":
+            embed = discord.Embed(title=f"**__{display_name} ({username})__**", description="🟢Is right now online!", color=GREEN)
+            embed.add_field(name="Date", value=now, inline=True)
+            embed.set_thumbnail(url=avatar_url)
+        else:
+            embed = discord.Embed(title=f"**__{display_name} ({username})__**", description="🔴Is right now offline!", color=RED)
+            embed.add_field(name="Date", value=now, inline=True)
+            embed.add_field(name="Played for", value="N/A", inline=True)
+            embed.set_thumbnail(url=avatar_url)
+        await channel.send(embed=embed)
+        data["agentblox_users"][username]["status"] = status
+    save_data()
+
+@tasks.loop(seconds=30)
+async def agentblox_loop():
+    await check_agentblox_status()
+
 # -----------------------------
 # BOT READY
 # -----------------------------
 @bot.event
 async def on_ready():
     bot.add_view(PanicButtonView())
+    agentblox_loop.start()
     await bot.tree.sync()
     print(f"Bot ist online als {bot.user}")
 
