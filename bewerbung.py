@@ -1,9 +1,8 @@
 import os
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord import app_commands
 import json
-import aiohttp
 from datetime import datetime, timedelta
 
 # -----------------------------
@@ -30,9 +29,7 @@ default_data = {
     "panic_channel": None,
     "panic_role": None,
     "whitelist": [],
-    "webhook_attempts": {},
-    "agentblox_channel": None,
-    "agentblox_users": {}
+    "webhook_attempts": {}
 }
 
 if os.path.exists(DATA_FILE):
@@ -216,106 +213,12 @@ async def on_webhooks_update(channel):
                 except:
                     pass
 
-# ================= AGENT BLOX REAL STATUS =================
-async def fetch_roblox_user_ids(usernames):
-    url = "https://api.roblox.com/users/get-by-username?username={}"
-    user_ids = {}
-    async with aiohttp.ClientSession() as session:
-        for username in usernames:
-            async with session.get(url.format(username)) as resp:
-                if resp.status == 200:
-                    js = await resp.json()
-                    if "Id" in js:
-                        user_ids[username] = js["Id"]
-    return user_ids
-
-async def fetch_roblox_presence(user_ids):
-    url = "https://presence.roblox.com/v1/presence/users"
-    headers = {"Content-Type": "application/json"}
-    data_payload = {"userIds": list(user_ids.values())}
-    async with aiohttp.ClientSession() as session:
-        async with session.post(url, json=data_payload, headers=headers) as resp:
-            if resp.status == 200:
-                return await resp.json()
-    return {}
-
-def get_avatar_url(user_id):
-    return f"https://www.roblox.com/headshot-thumbnail/image?userId={user_id}&width=420&height=420&format=png"
-
-@tasks.loop(seconds=30)
-async def agentblox_loop():
-    if not data["agentblox_users"] or not data["agentblox_channel"]:
-        return
-    channel = bot.get_channel(data["agentblox_channel"])
-    if not channel:
-        return
-
-    usernames = list(data["agentblox_users"].keys())
-    user_ids_map = await fetch_roblox_user_ids(usernames)
-    presence_data = await fetch_roblox_presence(user_ids_map)
-
-    for username, user_id in user_ids_map.items():
-        presence = next((u for u in presence_data.get("userPresences", []) if u["userId"] == user_id), None)
-        display_name = username
-        now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        avatar = get_avatar_url(user_id)
-        status = "offline"
-        if presence and presence.get("userPresenceType") == "Online":
-            status = "online"
-
-        last_status = data["agentblox_users"][username].get("status")
-        if last_status == status:
-            continue  # keine doppelte Nachricht senden
-
-        if status == "online":
-            embed = discord.Embed(title=f"**__{display_name} ({username})__**", description="🟢 Is right now online!", color=GREEN)
-            embed.add_field(name="Date", value=now_str, inline=True)
-            embed.set_thumbnail(url=avatar)
-        else:
-            embed = discord.Embed(title=f"**__{display_name} ({username})__**", description="🔴 Is right now offline!", color=RED)
-            embed.add_field(name="Date", value=now_str, inline=True)
-            embed.add_field(name="Played for", value="N/A", inline=True)
-            embed.set_thumbnail(url=avatar)
-
-        await channel.send(embed=embed)
-        data["agentblox_users"][username]["status"] = status
-
-    save_data()
-
-# -----------------------------
-# AGENTBLOX SLASH COMMANDS
-# -----------------------------
-@bot.tree.command(name="add-user", description="Fügt einen Roblox-Spieler zur Überwachung hinzu")
-async def add_user(interaction: discord.Interaction, username: str):
-    if username in data["agentblox_users"]:
-        await interaction.response.send_message("Benutzer ist bereits überwacht.", ephemeral=True)
-        return
-    data["agentblox_users"][username] = {"status": None}
-    save_data()
-    await interaction.response.send_message(f"{username} wurde zur AgentBlox-Liste hinzugefügt.", ephemeral=True)
-
-@bot.tree.command(name="remove-user", description="Entfernt einen Roblox-Spieler von der Überwachung")
-async def remove_user(interaction: discord.Interaction, username: str):
-    if username in data["agentblox_users"]:
-        del data["agentblox_users"][username]
-        save_data()
-        await interaction.response.send_message(f"{username} wurde entfernt.", ephemeral=True)
-    else:
-        await interaction.response.send_message(f"{username} ist nicht in der Liste.", ephemeral=True)
-
-@bot.tree.command(name="choose-channel", description="Wählt den Kanal für AgentBlox Nachrichten")
-async def choose_channel(interaction: discord.Interaction, channel: discord.TextChannel):
-    data["agentblox_channel"] = channel.id
-    save_data()
-    await interaction.response.send_message(f"AgentBlox Kanal gesetzt auf {channel.mention}", ephemeral=True)
-
 # -----------------------------
 # BOT READY
 # -----------------------------
 @bot.event
 async def on_ready():
     bot.add_view(PanicButtonView())
-    agentblox_loop.start()
     await bot.tree.sync()
     print(f"Bot ist online als {bot.user}")
 
